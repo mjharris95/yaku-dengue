@@ -155,25 +155,26 @@ synth_out_allper$gsynth_obj$est.att %>%
 
 # Examine values: construct table
 synth_out_allper$gsynth_obj$est.att %>% 
-  tail(10) %>%
+  tail(13) %>%
   data.frame() %>%
-  mutate(time = as.numeric(rownames(synth_out_allper$gsynth_obj$est.att) %>% tail(10)),
+  mutate(time = as.numeric(rownames(synth_out_allper$gsynth_obj$est.att) %>% tail(13)),
          ind = row_number()) %>% 
-  mutate(start_date = as_date("2023-03-25")+(ind-1)*28) %>%
+  mutate(start_date = as_date("2023-03-25")+(ind-4)*28) %>%
   mutate(end_date = start_date + 27) %>%
   mutate(start_date  = format(start_date, "%b %d"),
          end_date = format(end_date, "%b %d")) %>%
   mutate(ATT = mid.num, CI.lower=lower.num, CI.upper=upper.num) %>%
-  mutate(`Treatment Effect` = paste0(round(ATT), " (", round(CI.lower), " - ", round(CI.upper), ")")) %>%
+  mutate(`Number Attributable Cases` = paste0(round(ATT), " (", round(CI.lower), " - ", round(CI.upper), ")")) %>%
   mutate(`Percent Attributable Cases` = paste0(round(mid.pct, digits=2)*100, " (", 
                                                round(lower.pct, digits=2)*100, ", ",
                                                round(upper.pct, digits=2)*100, ")"
   )) %>%
   mutate(`p-value` = round(recalc.p, digits=3)) %>%
   rename(`Reported Cases` = "obs") %>%
+  mutate(`Number Non-Attributable Cases` = paste0(round(`Reported Cases` - mid.num), " (", round(`Reported Cases`- lower.num), " - ", round(`Reported Cases` - upper.num), ")")) %>%
   mutate(`Dates` = paste(start_date, "-", end_date)) %>%
-  select(`Dates`, `Treatment Effect`, `Reported Cases`, `Percent Attributable Cases`, `p-value`) %>%
-  xtable(., type = "latex", row.names=FALSE, digits=c(0, 0,0,0,0,3)) %>%
+  select(`Dates`, `Percent Attributable Cases`, `Number Attributable Cases`, `Number Non-Attributable Cases`, `Reported Cases`, `p-value`) %>%
+  xtable(., type = "latex", row.names=FALSE, digits=c(0,0,0,0,0,0,3)) %>%
   print(file = "adm3-allper_table.tex", include.rownames=FALSE)
 
 # Output table for covariate coefficients
