@@ -14,10 +14,11 @@ library(fect)
 library(beepr)
 library(xtable)
 library(colorspace)
+library(Hmisc)
 set.seed(0514) # make sure to always set the seed so results are replicable
 source("supporting-functions.R")
 
-### PLOT BASELINE CLIMATE, PRECIPITATION ANOMALY, AND ANOMALY DISTRIBUTION
+#### PLOT BASELINE CLIMATE, PRECIPITATION ANOMALY, AND ANOMALY DISTRIBUTION ####
 annual_df <- read.csv("march-clim_df.csv") %>%
   # calculate mean precip in reference period% 
   mutate(date = as_date(date)) %>%
@@ -65,26 +66,36 @@ map3 %>%  filter(country=="PER3") %>%
 
 p2a <- ggplot() + 
   geom_sf(data=map3, aes(fill=diff_rain*1000)) +
-  geom_sf(data = extreme_map3, col = "black", linewidth = .4)+ #bold outline of treated districts
+  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ #bold outline of treated districts
   scale_fill_viridis("Precipitation Anomaly (mm/day)", option="H")+
   theme_void()
 
 p2b <- ggplot() + 
   geom_sf(data=map3, aes(fill=mean_rain*1000)) +
-  geom_sf(data = extreme_map3, col = "black", linewidth = .4)+ #bold outline of treated districts
+  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ #bold outline of treated districts
   scale_fill_viridis("Historic Precipitation (mm/day)", option="mako", 
                      direction = -1)+
   theme_void()
 
 p2c <- ggplot()+
   geom_sf(data=map3, aes(fill=mean_temp)) +
-  geom_sf(data = extreme_map3, col = "black", linewidth = .4)+ #bold outline of treated districts
+  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ #bold outline of treated districts
   scale_fill_viridis("Historic Temperature (C)", option="plasma")+
   theme_void()
 
 plot_grid(p2a, plot_grid(p2b, p2c, nrow=2, labels=c("B", "C")), ncol=2, labels=c("A", ""))
 ggsave("figs/climate_map-noext.pdf", height=8, width=8, units="in")
 ggsave("figs/climate_map-noext.png", height=8, width=8, units="in")
+
+# plot temperature-dependent R0 curve
+read.csv("AedesR0Out.csv") %>%
+  ggplot() +
+  geom_line(aes(x=temperature, y=aegypti.R0.median))+
+  theme_classic()+
+  ylab("Relative R0")+
+  xlab("Temperature (C)")
+
+ggsave("figs/relr0.pdf", height=4, width=8, units="in")
 
 #### PREPARE INPUT DATA FOR SYNTHETIC CONTROL ANALYSIS ####
 
@@ -145,6 +156,18 @@ match_out_allper <- match_fun(anomaly_upper = .0085, anomaly_lower = .0085,
 synth_out_allper <- synth_fun(case_df, match_out_allper, "adm3-allper", 
                               att_plot=TRUE, spatt_plot=TRUE, map=per_map, big_map=dept_map, use_clim=TRUE,
                               start_year = 2016)
+
+# Get names of treated districts
+read_xlsx("maps/UBIGEODISTRITOS.XLSX") %>%
+       mutate(IDDIST = str_pad(IDDIST, 6, pad="0")) %>%
+       filter(IDDIST %in% match_out_allper$treated_names) %>%
+       rename(Region = NOMBDEP,
+              Province = NOMBPROV,
+              District = NOMBDIST) %>% 
+       select(Region, Province, District) %>%
+       arrange(Region) %>%
+       xtable(., type = "latex", row.names=FALSE) %>%
+       print(file = "treated-dist-names.tex", include.rownames=FALSE)
 
 # Get table about treated, untreated, and matched control districts
 match_out_allper$table
@@ -293,7 +316,7 @@ scenarios_p2 <- scen_att_df %>%
   theme_classic()+
   geom_hline(yintercept=0, linetype="dashed")+
   theme(legend.position="bottom")+
-  ylab("Treatment Effect")+
+  ylab("Cyclone-attributable cases")+
   xlab("Time")
 
 # combine plots and save
@@ -399,7 +422,7 @@ anom_p2 <-  anomvar_df %>%
   ggplot(aes(x=anomaly_upper, color=anomaly_lower)) + 
   geom_pointrange(aes(y=att.est/num.cases*100, ymin=att.lower/num.cases*100, ymax=att.upper/num.cases*100),
                   stat="identity", position = position_dodge2(width = .2))+ # plot CI
-  xlab("Precip. Anomaly (Treatment Threshold)")+
+  xlab("Precip. Anomaly (Cyclone-affected Threshold)")+
   ylab("Attributable \nCases (%)")+
   theme_classic()+
   scale_color_viridis_d("Precip. Anomaly (Control Threshold)", direction=-1)+
@@ -422,7 +445,7 @@ anom_p31 <- anomvar_df %>%
 anom_p32 <- anomvar_df %>%
   ggplot() + 
   geom_bar(aes(x=anomaly_upper, y=ntreated, fill=anomaly_lower), stat="identity", position="dodge")+
-  ggtitle("Treated Districts")+
+  ggtitle("Cyclone-affected Districts")+
   theme_classic()+
   theme(legend.position="none",  plot.title = element_text(size = 12))+
   scale_fill_viridis_d("Precip. Anomaly (Control Threshold)", direction=-1)+
@@ -547,7 +570,7 @@ mn_p2 <-  mnvar_df %>%
   ggplot(aes(x=as.factor(match_num))) + 
   geom_pointrange(aes(y=att.est/num.cases*100, ymin=att.lower/num.cases*100, ymax=att.upper/num.cases*100),
                   stat="identity")+
-  xlab("Precip. Anomaly (Treatment Threshold)")+
+  xlab("Precip. Anomaly (Cyclone-affected Threshold)")+
   ylab("Attributable \nCases (%)")+
   theme_classic()+
   theme(legend.position="bottom")+
@@ -568,7 +591,7 @@ mn_p31 <- mnvar_df %>%
 mn_p32 <- mnvar_df %>%
   ggplot() + 
   geom_bar(aes(x=match_num, y=ntreated), stat="identity")+
-  ggtitle("Treated Districts")+
+  ggtitle("Cyclone-affected Districts")+
   theme_classic()+
   theme(legend.position="none",  plot.title = element_text(size = 12))+
   ylab("n")+

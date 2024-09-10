@@ -1,7 +1,7 @@
 #### STANDARDIZED DIFFERENCE PLOT ####
 
 # Returns a plot of the standardized difference between climate covariates in treated 
-# and untreated districts before and after matching
+# and Cyclone-unaffected districts before and after matching
 #
 # Inputs: match_out: output from the match_fun function
 #         cyclone_step: index when cyclone occurred (can be retrieved from match_fun)
@@ -16,7 +16,7 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
   
   # calculate the differences before matching
   prediff_df <-  lapply(1:length(match_out$treated_names), function(n)
-    filter(baldf, !is_control == "Treated") %>%
+    filter(baldf, !is_control == "Cyclone-affected") %>%
       select(id, step, date_end, mean_rain, mean_temp) %>%
       left_join(., baldf %>% 
                   filter(id == match_out$treated_names[n]) %>%
@@ -28,7 +28,7 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
              temp_diff = treated_temp - mean_temp)) %>%
     do.call(rbind, .) %>%
     group_by(treated_id, step) %>%
-    summarize(rain_diff = mean(rain_diff),
+    dplyr::summarize(rain_diff = mean(rain_diff),
               temp_diff = mean(temp_diff)) 
   
   # calculate the differences after matching
@@ -45,7 +45,7 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
              temp_diff = treated_temp - mean_temp)) %>%
     do.call(rbind, .) %>%
     group_by(treated_id, step) %>%
-    summarize(rain_diff = mean(rain_diff),
+    dplyr::summarize(rain_diff = mean(rain_diff),
               temp_diff = mean(temp_diff)) 
   
   # plots: each line is the mean standardized difference between a district and its matched controls
@@ -108,7 +108,7 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
 
 #### CLIMATE TIME SERIES PLOT ####
 
-# Returns a plot of mean climate conditions over time in the treated, untreated,
+# Returns a plot of mean climate conditions over time in the treated, Cyclone-unaffected,
 # and matched control districts
 #
 # Inputs: match_out: output from the match_fun function
@@ -124,44 +124,110 @@ climts_plot <- function(match_out, cyclone_step, file_prefix,
   
   match_df <- match_out$df
   
-  p <- match_df %>%
-    # also include the matched control districts in the untreated pool
+    
+  clim_ts <- match_df %>%
+    # also include the matched control districts in the Cyclone-unaffected pool%
     filter(is_control == "Matched Control") %>%
-    mutate(is_control = "Untreated") %>%
+    mutate(is_control = "Cyclone-unaffected") %>%
     rbind(match_df) %>%
     group_by(is_control, step) %>%
     # take a weighted mean (some matched control districts are included multiple times)
-    summarize(Temperature = weighted.mean(mean_temp, weight),
-              Precipitation = weighted.mean(mean_rain, weight),
-              Rel_R0 = weighted.mean(mean_rel_r0, weight)) %>%
-    # pivot longer to facet the plot
-    pivot_longer(names_to="var_name",
-                 values_to="value",
-                 cols=c(Temperature, Precipitation, Rel_R0)) %>%
-    # filter to the selected variables
-    filter(var_name %in% my_vars) %>%
-    ggplot() + 
-    geom_line(aes(x=step, y=value, group=is_control, color=is_control), alpha=.8)+
-    geom_vline(xintercept = cyclone_step, linetype="dashed", color="grey50")+
-    facet_wrap(~var_name, scale="free_y")+
-    # will only plot matched control, treated, and untreated
-    scale_color_manual("",
-                       breaks=c("Matched Control", "No Data", "Non-Coastal", "Treated", "Untreated"),
-                       values=c("#C70039", "grey70", "#C1E1C1", "#581845", "#FFC300"))+
-    theme_classic()+
-    ylab("Time (Months Pre-Cyclone)")+
-    scale_x_continuous(breaks=year_ind,
-                       labels=years)+
-    theme(legend.position="bottom", 
-          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+    dplyr::summarize(Temperature = weighted.mean(mean_temp, weight),
+                     Precipitation = weighted.mean(mean_rain, weight),
+                     Rel_R0 = weighted.mean(mean_rel_r0, weight),
+    ) 
   
-  print(p)
-  ggsave(paste0("figs/", file_prefix, "-clim_matchcomp.pdf"), height=4, width=8, units="in")
+    # plot temperature, precipitation, and relative r0
+    temp_plot <-  clim_ts %>% 
+      ggplot() + 
+      # highlight four-week period containing the cyclone
+      geom_rect(xmin = cyclone_step, xmax  = cyclone_step + 1, ymin=-Inf, ymax=Inf, alpha=.5, fill="grey50", color="grey50")+
+      geom_line(aes(x=step, y=Temperature, group=is_control, color=is_control), alpha=.8)+
+      scale_color_manual("",
+                         breaks = c("Cyclone-affected", "Matched Control", "Cyclone-unaffected", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
+                         values = c("#581845", "#6FC0DB", "#FFC300", "grey90", "grey50", "maroon"))+
+      theme_classic()+
+      xlab("Year")+
+      scale_x_continuous(breaks=year_ind, #make x-axis years
+                         labels=years)+
+      ylab("Temperature (C)") +
+      theme(legend.position="bottom", 
+            axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+    
+    
+    rain_plot <-  clim_ts %>% 
+      ggplot() + 
+      geom_rect(xmin = cyclone_step, xmax  = cyclone_step + 1, ymin=-Inf, ymax=Inf, alpha=.5, fill="grey50", color="grey50")+
+      geom_line(aes(x=step, y=Precipitation, group=is_control, color=is_control), alpha=.8)+
+      scale_color_manual("",
+                         breaks = c("Cyclone-affected", "Matched Control", "Cyclone-unaffected", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
+                         values = c("#581845", "#6FC0DB", "#FFC300", "grey90", "grey50", "maroon"))+
+      theme_classic()+
+      xlab("Year")+
+      scale_x_continuous(breaks=year_ind, #make x-axis years
+                         labels=years)+
+      ylab("Precipitation (mm/day)") +
+      theme(legend.position="none", 
+            axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+    
+    r0_plot <-  clim_ts %>%
+      ggplot() + 
+      geom_rect(xmin = cyclone_step, xmax  = cyclone_step + 1, ymin=-Inf, ymax=Inf, alpha=.5, fill="grey50", color="grey50")+
+      geom_line(aes(x=step, y=Rel_R0, group=is_control, color=is_control), alpha=.8)+
+      scale_color_manual("",
+                         breaks = c("Cyclone-affected", "Matched Control", "Cyclone-unaffected", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
+                         values = c("#581845", "#6FC0DB", "#FFC300", "grey90", "grey50", "maroon"))+
+      theme_classic()+
+      xlab("Year")+
+      scale_x_continuous(breaks=year_ind, #make x-axis years
+                         labels=years)+
+      ylab("Relative R0")+
+      theme(legend.position="none", 
+            axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+    
+    # plot a grid of whichever climate variables were requested
+    plots<-list()
+    
+    leg <- get_legend(temp_plot)
+    temp_plot <- temp_plot+theme(legend.position="none")
+    
+    if("Temperature" %in% my_vars){
+      plots[[length(plots)+1]] <-temp_plot
+    }
+    
+    if("Precipitation" %in% my_vars){
+      plots[[length(plots)+1]] <- rain_plot
+    }
+    
+    
+    if("Relative R0" %in% my_vars){
+      plots[[length(plots)+1]] <- r0_plot
+    }
+    
+    if(length(plots)==1){
+      p <- plot_grid(plots[[1]]) %>%
+        plot_grid(., leg, nrow=2, rel_heights=c(9, 1))
+    }
+    
+    else if(length(plots)==2){
+      p <- plot_grid(plots[[1]], plots[[2]], nrow=2) %>%
+        plot_grid(., leg, nrow=2, rel_heights=c(9, 1))
+    }
+    
+    else{
+      p <- plot_grid(plots[[1]], plots[[2]], plots[[3]], nrow=3) %>%
+        plot_grid(., leg, nrow=2, rel_heights=c(9, 1))
+    }
+    
+    print(p)
+    
+    ggsave(paste0("figs/", file_prefix, "-clim_matchcomp.pdf"), height=6, width=8, units="in")
+
 }
 
 #### DISTRICT MAP FOR MATCHING  ####
 
-# Returns a plot of districts color-coded by treated, untreated, matched control,
+# Returns a plot of districts color-coded by Cyclone-affected, Cyclone-unaffected, matched control,
 # or reason for exclusions from analysis
 #
 # Inputs: map: shapefile of spatial units at level used for analysis
@@ -201,8 +267,8 @@ matchmap_plot <- function(map, big_map, file_prefix, match_out,
     map$is_control <- ifelse(! map$id %in% coastal_dist, "Non-Coastal", map$is_control)
   }
   
-  # rename untreated column
-  map$is_control <- ifelse(map$is_control == "Untreated", "Control (Unmatched)", map$is_control)
+  # rename Cyclone-unaffected column
+  map$is_control <- ifelse(map$is_control == "Cyclone-unaffected", "Control (Unmatched)", map$is_control)
   
   
 # generate and save plot
@@ -211,8 +277,8 @@ matchmap_plot <- function(map, big_map, file_prefix, match_out,
     geom_sf(data = big_map, fill=NA, color="black", lwd=.8) + # bolds borders of big_map
     theme_void()+
     scale_fill_manual("",
-                      breaks=c("Matched Control", "No Cases", "Non-Coastal", "Treated", "Control (Unmatched)", "Buffer District"),
-                      values=c("#C70039", "grey90", "#C1E1C1", "#581845", "#FFC300", "grey50"))
+                      breaks = c("Cyclone-affected", "Matched Control", "Cyclone-unaffected", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
+                      values = c("#581845", "#6FC0DB", "#FFC300", "grey90", "grey50", "maroon"))
   ggsave(paste0("figs/", file_prefix, "-matchmap.png"), height=4, width=8, units="in")
 }
 
@@ -240,12 +306,12 @@ att_plot <- function(gsynth_out, cyclone_step, file_prefix,
             geom_hline(yintercept=0, color="maroon", linetype="dashed")+
             geom_vline(xintercept=cyclone_step, color="maroon", linetype="dashed")+ # indicate cyclone index
             xlab("Time (Years)")+
-            ylab("Treatment Effect (Sum)")+
+            ylab("Cyclone-attributable cases")+
             ggtitle("")+
             theme_classic()+
             theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
           
-  ts_cases <- rbind(gsynth_out$Y.ct[,gsynth_out$tr] %>% # counterfactual cases in treated districts
+  ts_cases <- rbind(gsynth_out$Y.ct[,gsynth_out$tr] %>% # counterfactual cases in cyclone-affected districts
                       t() %>% 
                       data.frame() %>%
                       cbind(id= gsynth_out$id[,gsynth_out$tr]) %>% 
@@ -255,7 +321,7 @@ att_plot <- function(gsynth_out, cyclone_step, file_prefix,
                                    values_to="cases") %>%
                       mutate(time = as.numeric(time)) %>%
                       mutate(group = "Synthetic Control"), #label all of these as belonging to synthetic control
-                    gsynth_out$Y.dat[,gsynth_out$tr] %>% # actual cases in treated units
+                    gsynth_out$Y.dat[,gsynth_out$tr] %>% # actual cases in cyclone-affected units
                       t() %>% 
                       data.frame() %>%
                       cbind(id= gsynth_out$id[gsynth_out$tr]) %>%
@@ -269,7 +335,7 @@ att_plot <- function(gsynth_out, cyclone_step, file_prefix,
   
   att1 <- ts_cases %>%  
     group_by(time, group) %>% # aggregate to total cases at each timepoint
-    summarize(cases=sum(cases,na.rm=TRUE)) %>%
+    dplyr::summarize(cases=sum(cases,na.rm=TRUE)) %>%
     ggplot() +
     geom_line(aes(x=time, y = cases, color=group, linewidth=group))+
     ggtitle("")+
@@ -310,33 +376,34 @@ att_plot <- function(gsynth_out, cyclone_step, file_prefix,
 att_print <- function(gsynth_out, cyclone_step,
                       tr_ind = c("3", "4", "5", "6", "7", "8", "9", "10")){
   
-  # will use these to select treated entries
+  # will use these to select cyclone-affected entries
   treated_ind <- gsynth_out$tr
   ntreated <- length(treated_ind)
   time_ind <- which(rownames(gsynth_out$est.att) %in% tr_ind)
   
-  # select the correct columns for treatment effect, upper and lower CI
-  att_df <- gsynth_out$est.att[time_ind,] %>%
-    data.frame() %>%
-    mutate(ATT = mid.num,
-           CI.upper = upper.num,
-           CI.lower = lower.num)
+  # across each bootstrap, calculate the proportion attributable cases during period indicated by time_ind
+  pct_quants <- sapply(1:1000, function(n) sum(gsynth_out$att.boot[time_ind,n]*ntreated, na.rm=TRUE)/(gsynth_out$Y.boot[[n]][time_ind, 1:ntreated] %>% sum(na.rm=TRUE))) %>%
+    quantile(c(.025, .975))
   
-  # sum over the treatment period
-  num_attr <- att_df %>% select(obs) %>% sum()
-  lower_ci <- att_df %>% select(CI.lower) %>%  sum()
-  upper_ci <- att_df %>% select(CI.upper) %>% sum()
-  num_cases <- att_df %>% select(obs) %>% sum() 
+  num_attr <- gsynth_out$est.att[time_ind,] %>%
+    select(mid.num) %>%
+    sum()
+  
+  num_cases <- gsynth_out$Y.dat[time_ind, treated_ind] %>% rowSums() %>% sum() %>% as.numeric()
+  
+  # create list of values
+  vals <- list(num_attr=num_attr,
+                 lower_ci=num_cases*as.numeric(pct_quants[1]),
+                 upper_ci=num_cases*as.numeric(pct_quants[2]),
+                 lower_pct=as.numeric(pct_quants[1])*100,
+                 upper_pct=as.numeric(pct_quants[2])*100,
+                 pct_cases=num_attr/num_cases*100,
+                 num_cases=num_cases)
   
   # print the main result, including percent attributable cases
-  print(paste0(round(num_attr), " (", round(lower_ci), ", ", round(upper_ci), ") cases were attributable to the cyclone, out of ", num_cases, " (", round(num_attr/num_cases*100, digits=2), "%)"))
+  print(paste0(round(vals$num_attr), " (", round(vals$lower_ci), ", ", round(vals$upper_ci), ") cases were attributable to the cyclone, out of ", vals$num_cases, " (", round(vals$num_attr/vals$num_cases*100, digits=2), "%)"))
   
-  # return a list of values
-  return(list(num_attr=num_attr,
-              lower_ci=lower_ci,
-              upper_ci=upper_ci,
-              pct_cases=num_attr/num_cases*100,
-              num_cases=num_cases))
+  return(vals)
 }
 
 #### SPATIAL TREATMENT EFFECT PLOT ####
@@ -378,9 +445,9 @@ spatt_plot <- function(pop_df, gsynth_out, map, big_map, file_prefix,
     left_join(pop_help) %>%
     mutate(att_pc = att/pop * 1000) # calculate attributable cases per thousand people
   merge(map, att_pc_df) %>% # append to map of districts
-    rename(`Treatment Effect \n(Cases per Thousand)` = att_pc)  %>%
+    rename(`Cyclone-Attributable \nCases per Thousand)` = att_pc)  %>%
     ggplot()+
-    geom_sf(aes(fill=`Treatment Effect \n(Cases per Thousand)`), color="black", lwd=.3)+
+    geom_sf(aes(fill=`Cyclone-attributable \nCases per Thousand)`), color="black", lwd=.3)+
     geom_sf(data=big_map, fill=NA, color="black", lwd=.8)+ # add big_map borders
     scale_fill_stepsn(colours=c("#1919A4", "#8C8CD1", "#FFFFFF", "#FF7F7F", "#FF0000", "#BA0007", "#75000E", "#5B000B", "#420008", "black"),
                       breaks=c(-10, -5, 0, 5, 10, 15, 20, 25, 30),
@@ -426,7 +493,7 @@ spatt_plot <- function(pop_df, gsynth_out, map, big_map, file_prefix,
     geom_line(linewidth=.2, alpha=.5)+
     theme_classic()+
     facet_wrap(~departamento, ncol=2, scales="free")+ # gives axes to all plots
-    ylab("Treatment effect (case per thousand)")+
+    ylab("Cyclone-attributable \ncases per thousand")+
     xlab("Time")+
     theme(legend.position="none")+
     scale_x_date(date_breaks = "2 months", date_labels = "%b")+ # make the x-axis (time) nice
@@ -445,7 +512,7 @@ spatt_plot <- function(pop_df, gsynth_out, map, big_map, file_prefix,
 
 #### MATCHING FUNCTION ####
 
-# Matches treated districts to untreated districts with most similar climate conditions
+# Matches treated districts to Cyclone-unaffected districts with most similar climate conditions
 # and generates tables and (optional) plots related to this process
 #
 # Inputs: anomaly_upper: upper threshold for precipitation anomaly (above this considered treated)
@@ -455,21 +522,23 @@ spatt_plot <- function(pop_df, gsynth_out, map, big_map, file_prefix,
 #         cases_2023:   optional, vector of units that reported cases in 2023 (other units excluded)
 #         my_country:   countries to include in analysis. PER3 is Peru at admin level 3 (district)
 #                       use this for region-level analysis: c("PER", "COL1", "ECU1", "MEX", "BRA1")
-#         match_num: how many untreated units each treated district should be matched to
+#         match_num: how many Cyclone-unaffected units each treated district should be matched to
 #         plot_bal: TRUE/FALSE, whether to plot standardized difference and mean values over time for climate covariates (to visualize balance
-#         plot_map: TRUE/FALSE, whether to plot map of which units were treated, untreated, matched control, excluded
+#         plot_map: TRUE/FALSE, whether to plot map of which units were treated, Cyclone-unaffected, matched control, excluded
 #         file_prefix: prefix to save pdf image (if plot_bal or plot_map is true)
 #         map: shapefile of spatial units at level used for analysis (if plot_map is true)
 #         big_map: shapefile of spatial units at higher administrative division to indicate borders (if plot_map is true)
 # Output: a pdf figures in the figs folder if requested and a list with the following entries
 #         match_names: names of the units included in matched control pool
-#         df: climate covariates over time and designation (treated, untreated, control) for each district
+#         df: climate covariates over time and designation (treated, Cyclone-unaffected, control) for each district
 #         treated_names: names of treated units
 #         match_obj: output of the PanelMatch package
 #         balance: output of get_covariate_balance, gives standardized difference over time with respect to climate covariates
 #         abs_bal: output of get_covariate balance, gives absolute standardized difference over time with respect to climate covariates
 #         match_list: a list of length treated_names where each entry is the units matched to a given treated units
-#
+#         years: the years over which climate data is provided 
+#         year_ind: the indices for when a new year starts 
+#         cyclone_step: the index when the cyclone occured
 match_fun <- function(anomaly_upper = .0085, anomaly_lower = .0085,
                       coastal_dist = c(), cases_2023 = c(),
                       my_country = "PER3", 
@@ -487,7 +556,7 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .0085,
     stop("Provide map to plot")
   }
   
-  # identify treated, untreated, and buffer units in Peru and Ecuador based on upper/lower anomaly threshold
+  # identify treated, Cyclone-unaffected, and buffer units in Peru and Ecuador based on upper/lower anomaly threshold
   anomaly_df <- read.csv("anomaly_df.csv")
   anomaly_df %>% filter(diff_rain>anomaly_upper & country %in% c("PER3", "PER")) %>% select(id) %>% unique() %>% unlist() -> extreme_ids
   anomaly_df %>% filter(diff_rain<=anomaly_lower) %>% select(id) %>% unique() %>% unlist() -> nonextreme_ids
@@ -525,7 +594,7 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .0085,
   # define 4-week periods ("steps")
   step_help <- clim_df %>%
     group_by(week, year) %>%
-    summarize(date_end = max(date)) %>%
+    dplyr::summarize(date_end = max(date)) %>%
     ungroup() %>%
     arrange(date_end) %>%
     mutate(weeknum = row_number()) %>%
@@ -539,7 +608,7 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .0085,
   # will use this to filter out if there's a step with fewer than four weeks
   step_filter <- step_help %>%
     group_by(step) %>%
-    summarize(frq = n()) %>%
+    dplyr::summarize(frq = n()) %>%
     filter(frq < 4) %>%
     select(step) %>%
     unlist()
@@ -548,7 +617,7 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .0085,
   clim_df %<>% left_join(step_help) %>% 
     filter(! step %in% step_filter) %>%
     group_by(id, country, step) %>%
-    summarize(mean_rel_r0 = mean(rel_r0),
+    dplyr::summarize(mean_rel_r0 = mean(rel_r0),
               mean_rain = mean(rain),
               mean_temp = mean(temp),
               int = max(int),
@@ -556,14 +625,14 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .0085,
     mutate(mean_rain = mean_rain * 1000) %>%
     # format for matching package
     transform(place = as.integer(as.factor(id))) %>%
-    mutate(is_control = ifelse(id %in% extreme_ids, "Treated", "Untreated"))
+    mutate(is_control = ifelse(id %in% extreme_ids, "Cyclone-affected", "Cyclone-unaffected"))
   
   # how many steps to match on
-  lag_num <- nrow(filter(clim_df, is_control == "Treated" & int==0) %>%
+  lag_num <- nrow(filter(clim_df, is_control == "Cyclone-affected" & int==0) %>%
                     select(step) %>%
                     distinct())
   
-  # do not conduct any matching, just compare treated vs untreated units
+  # do not conduct any matching, just compare treated vs Cyclone-unaffected units
   unmatch_res <- PanelMatch(lag = lag_num, time.id = "step", unit.id = "place",
                             treatment = "int", refinement.method = "none",
                             data = clim_df, match.missing =FALSE,
@@ -601,7 +670,7 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .0085,
     as.numeric() %>%
     data.frame(place = .) %>% 
     group_by(place) %>% 
-    summarize(weight=n()) %>%
+    dplyr::summarize(weight=n()) %>%
     right_join(clim_df) %>%
     mutate(weight = ifelse(is.na(weight), 1, weight)) # if not in matched control, everything is weighted equally
   
@@ -611,19 +680,21 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .0085,
   # label which units are in the matched control
   match_df %<>% mutate(is_control = ifelse(id %in% matched_names, "Matched Control", is_control)) 
   
-  # table comparing covariate means in treated, untreated, and matched control
+  # table comparing covariate means in treated, Cyclone-unaffected, and matched control
   match_tab <-   match_df %>%
     filter(is_control == "Matched Control") %>%
-    mutate(is_control = "Untreated",
+    mutate(is_control = "Cyclone-unaffected",
            weight = 1) %>%
-    rbind(match_df) %>% # we need to also have the matched control units counted in the untreated pool
-    group_by(is_control) %>%
-    summarize(Temperature = weighted.mean(mean_temp, weight),   # take weighted averages 
-              Rainfall = weighted.mean(mean_rain, weight),
+    rbind(match_df) %>% # we need to also have the matched control units counted in the Cyclone-unaffected pool
+    group_by(is_control) %>% 
+    dplyr::summarize(`Mean Temp.` = weighted.mean(mean_temp, weight), # weighted average and standard deviation
+              `Mean Precip.` = weighted.mean(mean_rain, weight),
+              `Sd. Temp.` = sqrt(Hmisc::wtd.var(mean_temp, weight)),
+              `Sd. Precip.` = sqrt(Hmisc::wtd.var(mean_rain, weight)),
               n = length(unique(id))) 
   
   # names of treated units
-  treated_names <- filter(match_df, is_control == "Treated") %>%
+  treated_names <- filter(match_df, is_control == "Cyclone-affected") %>%
     select(id) %>% 
     unlist() %>%
     unique()
@@ -636,7 +707,10 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .0085,
                     "match_obj" = match_res,
                     "balance" = bal_calc,
                     "abs_bal" = abs_bal_calc,
-                    "match_list" = matched_prov)
+                    "match_list" = matched_prov,
+                    "years" = years,
+                    "year_ind" = year_ind,
+                    "cyclone_step" = cyclone_step)
   
   # balance plots if desired
   if(plot_bal == TRUE){
@@ -675,7 +749,7 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .0085,
 
 # Output: pdf figures in the figs folder if requested and a list with the following entries
 #         gsynth_obj: a gsynth object from the fect package
-#         att_nums: summary of attributable cases (from att_print function)
+#         att_nums: summary of attributable cases (from  function)
 #         years: the years over which climate data is provided 
 #         year_ind: the indices for when a new year starts 
 synth_fun <- function(case_df, match_out, file_prefix, 
@@ -706,7 +780,7 @@ synth_fun <- function(case_df, match_out, file_prefix,
       # sometimes the last few days of a year get assigned to first epiweek of following year
       mutate(year = ifelse(week == 1 & month == 12, year+1, year)) %>%
       group_by(week, year, id) %>%
-      summarize(mean_temp = mean(temp),
+      dplyr::summarize(mean_temp = mean(temp),
                 mean_rain = mean(rain),
                 mean_rel_r0 = mean(rel_r0)) %>%
       left_join(case_df) %>%
@@ -727,7 +801,7 @@ synth_fun <- function(case_df, match_out, file_prefix,
       # sometimes the last few days of a year get assigned to first epiweek of following year
       mutate(year = ifelse(week == 1 & month == 12, year+1, year)) %>%
       group_by(week, year, id) %>%
-      summarize(mean_temp = mean(temp),
+      dplyr::summarize(mean_temp = mean(temp),
                 mean_rain = mean(rain),
                 mean_rel_r0 = mean(rel_r0)) %>%
       left_join(case_df) %>%
@@ -762,7 +836,7 @@ synth_fun <- function(case_df, match_out, file_prefix,
   df <- time_df %>%
     right_join(df) %>%
     group_by(id, step) %>%
-    summarize(cases = sum(cases),
+    dplyr::summarize(cases = sum(cases),
               inc = sum(inc),
               mean_temp = mean(mean_temp),
               mean_rel_r0 = mean(mean_rel_r0),
@@ -779,7 +853,7 @@ synth_fun <- function(case_df, match_out, file_prefix,
            inc = ifelse(is.na(inc), 0, inc)) %>%
     mutate(int = ifelse(id %in% match_out$treated_names & step >= cyclone_step, 1, 0)) %>% # specify post-treatment period
     mutate(log_cases = log(cases+1)) %>% # calculate logged cases
-    left_join(., match_out$df %>% select(id, is_control) %>% distinct() %>% filter(is_control %in% c("Treated", "Matched Control"))) 
+    left_join(., match_out$df %>% select(id, is_control) %>% distinct() %>% filter(is_control %in% c("Cyclone-affected", "Matched Control"))) 
   
   #  if specified, use incidence or logged cases as outcome
   if(inc == TRUE){
@@ -837,7 +911,7 @@ synth_fun <- function(case_df, match_out, file_prefix,
     do.call(cbind, .) %>%
     `/`(gsynth_out$att.boot * length(gsynth_out$tr), .) %>%
     ifelse(is.infinite(.), 0, .) %>% # set proportion to zero if there are no reported cases
-    apply(1, function(x) c(quantile(x, c(.05, .95)), sd(x)/sqrt(length(x)), sum(x<=0)/length(x))) %>% # recalculate 95% CI, standard error, p-value
+    apply(1, function(x) c(quantile(x, c(.025, .975)), sd(x)/sqrt(length(x)), sum(x<=0)/length(x))) %>% # recalculate 95% CI, standard error, p-value
     t() %>%
     data.frame() %>%
     rename(lower.pct = 1,
