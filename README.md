@@ -1,6 +1,8 @@
-# This repository contains data and scripts to run a project estimating the number of additional cases of dengue caused by Cyclone Yaku.
+# This repository contains data and scripts to run a project estimating the number of additional cases of dengue caused by Cyclone Yaku and attributing extreme precipitation events in northwest Peru to anthropogenic activity.
 
-# Data
+# Part 1: Cyclone Yaku and dengue
+
+## Data
 
 adm1_cases.csv: weekly cases in Peru, Ecuador, Colombia, Mexico, and Brazil to estimate cases attributable Cyclone Yaku at the adm1 level
 
@@ -16,7 +18,7 @@ march-clim_df.csv: climate in March from 1993 - 2023 in each spatial unit
 
 clim-df.csv: climate every day from 2016- 2023, used for matching and the synthetic control analysis.
 
-# Scripts
+## Scripts
 
 analysis.R: script to conduct all analyses in main text and supplement
 
@@ -28,8 +30,7 @@ rgee-tomatch.R: uses Google Earth Engine to extract climate data for the entire 
 
 supporting-function.R: defines several functions to that are called repeatedly in the analysis script to conduct matching and the synthetic control analysis and plot results.
 
-# Folders
-
+## Folders
 case-prep-scripts: for each country (Peru, Colombia, Ecuador, Mexico, and Brazil), the R scripts used to pre-process and combine case data files. Cannot be run because disaggregated case files are not provided in this repository (but their sources are described in the paper).
 
 cases: outputs of case-prep-scripts, the adm1-level .csv files that give weekly cases
@@ -37,3 +38,16 @@ cases: outputs of case-prep-scripts, the adm1-level .csv files that give weekly 
 maps: shapefiles for adm1-level maps of Mexico, Colombia, Ecuador, and Brazil. The shapefiles with prefix CDC are region-level (adm1) and district-level (adm3) maps of Peru. five_map is a shapefile that combines the maps of all five countries.
 
 pop: some outputs of rgee-tomatch.R, population of spatial units in different countries.
+
+# Part 2: Climate attribution
+
+## Scripts
+1_climate_attribution.ipynb: jupyter notebook that runs climate attribution analyses. This script saves figure files to the /climate_figures/ directory.
+
+## Folders: 
+climate_input_data: Contains monthly precipitation data from climate models downloaded from the CMIP6 database, accessed via the Earth System Grid Federation website at https://aims2.llnl.gov/search. See input_data/README.md for details.
+
+climate_figures: directory containing figure files, output by 1_climate_attribution.ipynb script
+
+
+
