@@ -1,6 +1,16 @@
 # This repository contains data and scripts to run a project estimating the number of additional cases of dengue caused by Cyclone Yaku and attributing extreme precipitation events in northwest Peru to anthropogenic activity.
 
-# Part 1: Cyclone Yaku and dengue
+# Part 1: Climate attribution
+
+## Scripts
+1_climate_attribution.ipynb: jupyter notebook that runs climate attribution analyses. This script saves figure files to the /1_climate_figures/ directory.
+
+## Folders: 
+1_climate_input_data: Contains monthly precipitation data from climate models downloaded from the CMIP6 database, accessed via the Earth System Grid Federation website at https://aims2.llnl.gov/search. See 1_climate_input_data/README.md for details.
+
+1_climate_figures: directory containing figure files, output by 1_climate_attribution.ipynb script
+
+# Part 2: Cyclone Yaku and dengue
 
 ## Data
 
@@ -38,16 +48,6 @@ cases: outputs of case-prep-scripts, the adm1-level .csv files that give weekly 
 maps: shapefiles for adm1-level maps of Mexico, Colombia, Ecuador, and Brazil. The shapefiles with prefix CDC are region-level (adm1) and district-level (adm3) maps of Peru. five_map is a shapefile that combines the maps of all five countries.
 
 pop: some outputs of rgee-tomatch.R, population of spatial units in different countries.
-
-# Part 2: Climate attribution
-
-## Scripts
-1_climate_attribution.ipynb: jupyter notebook that runs climate attribution analyses. This script saves figure files to the /climate_figures/ directory.
-
-## Folders: 
-climate_input_data: Contains monthly precipitation data from climate models downloaded from the CMIP6 database, accessed via the Earth System Grid Federation website at https://aims2.llnl.gov/search. See input_data/README.md for details.
-
-climate_figures: directory containing figure files, output by 1_climate_attribution.ipynb script
 
 
 
