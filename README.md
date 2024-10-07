@@ -3,10 +3,12 @@
 # Part 1: Climate attribution
 
 ## Scripts
+
 1_climate_attribution.ipynb: jupyter notebook that runs climate attribution analyses. This script saves figure files to the /1_climate_figures/ directory.
 
-## Folders: 
-1_climate_input_data: Contains monthly precipitation data from climate models downloaded from the CMIP6 database, accessed via the Earth System Grid Federation website at https://aims2.llnl.gov/search. See 1_climate_input_data/README.md for details.
+## Folders:
+
+1_climate_input_data: Contains monthly precipitation data from climate models downloaded from the CMIP6 database, accessed via the Earth System Grid Federation website at <https://aims2.llnl.gov/search>. See 1_climate_input_data/README.md for details.
 
 1_climate_figures: directory containing figure files, output by 1_climate_attribution.ipynb script
 
@@ -19,6 +21,8 @@ adm1_cases.csv: weekly cases in Peru, Ecuador, Colombia, Mexico, and Brazil to e
 AedesR0Out.csv: converts temperature to a temperature-dependent R0 term (from [Mordecai et al 2017](https://journals.plos.org/plosntds/article?id=10.1371/journal.pntd.0005568))
 
 anomaly_df.csv: March precipitation anomaly during Cyclone Yaku in Peruvian districts (based on Google Earth Engine data)
+
+codubi.rds: Population estimates for districts in Peru from 2010 - 2023
 
 PER_adm3_cases.rds: weekly cases reported in Peruvian districts (adm3)
 
@@ -41,13 +45,11 @@ rgee-tomatch.R: uses Google Earth Engine to extract climate data for the entire 
 supporting-function.R: defines several functions to that are called repeatedly in the analysis script to conduct matching and the synthetic control analysis and plot results.
 
 ## Folders
+
 case-prep-scripts: for each country (Peru, Colombia, Ecuador, Mexico, and Brazil), the R scripts used to pre-process and combine case data files. Cannot be run because disaggregated case files are not provided in this repository (but their sources are described in the paper).
 
 cases: outputs of case-prep-scripts, the adm1-level .csv files that give weekly cases
 
 maps: shapefiles for adm1-level maps of Mexico, Colombia, Ecuador, and Brazil. The shapefiles with prefix CDC are region-level (adm1) and district-level (adm3) maps of Peru. five_map is a shapefile that combines the maps of all five countries.
 
-pop: some outputs of rgee-tomatch.R, population of spatial units in different countries.
-
-
-
+pop: some outputs of rgee-tomatch.R, population of spatial units in different countries

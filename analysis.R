@@ -14,7 +14,8 @@ library(fect)
 library(beepr)
 library(xtable)
 library(colorspace)
-library(Hmisc)
+library(psych)
+library(berryFunctions)
 set.seed(0514) # make sure to always set the seed so results are replicable
 source("supporting-functions.R")
 
@@ -64,28 +65,38 @@ map3 %>%  filter(country=="PER3") %>%
   filter(diff_rain > .0085) %>%
   summarise(id = "extreme") -> extreme_map3 # treated districts most heavily impacted by cyclone
 
+# merge data and plot for adm1
 p2a <- ggplot() + 
   geom_sf(data=map3, aes(fill=diff_rain*1000)) +
-  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ #bold outline of treated districts
+  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of cyclone-affected districts
   scale_fill_viridis("Precipitation Anomaly (mm/day)", option="H")+
-  theme_void()
+  theme_void()+
+  theme(legend.position="bottom")+
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5,
+                                barwidth=11))
 
 p2b <- ggplot() + 
   geom_sf(data=map3, aes(fill=mean_rain*1000)) +
-  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ #bold outline of treated districts
-  scale_fill_viridis("Historic Precipitation (mm/day)", option="mako", 
+  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of cyclone-affected districts
+  scale_fill_viridis("Historic Precipitation (mm/day)", option="viridis", 
                      direction = -1)+
-  theme_void()
+  theme_void()+
+  theme(legend.position="bottom")+
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5,
+                                barwidth=11))
 
 p2c <- ggplot()+
   geom_sf(data=map3, aes(fill=mean_temp)) +
-  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ #bold outline of treated districts
-  scale_fill_viridis("Historic Temperature (C)", option="plasma")+
-  theme_void()
+  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of cyclone-affected districts
+  scale_fill_viridis("Historic Temperature (C)", option="plasma", breaks=c(5, 10, 15, 20, 25))+
+  theme_void()+
+  theme(legend.position="bottom")+
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5,
+                                barwidth=11))
 
-plot_grid(p2a, plot_grid(p2b, p2c, nrow=2, labels=c("B", "C")), ncol=2, labels=c("A", ""))
-ggsave("figs/climate_map-noext.pdf", height=8, width=8, units="in")
-ggsave("figs/climate_map-noext.png", height=8, width=8, units="in")
+plot_grid(p2a, p2b, p2c, nrow=1, labels="AUTO")
+ggsave("figs/climate_map.pdf", height=4, width=8, units="in")
+ggsave("figs/climate_map.png", dpi=320, height=4, width=8, units="in")
 
 # plot temperature-dependent R0 curve
 read.csv("AedesR0Out.csv") %>%
@@ -133,29 +144,49 @@ case_df <- readRDS("PER_adm3_cases.RDS") %>%
   filter(year <= 2023) %>%
   rename(id = ubigeo)
 
-# population dataframe from Google Earth Engine
-pop_df <- read.csv("pop/PER3_pop.csv") %>%
-  rename(pop = sum,
-         id = ubigeo) %>%
-  mutate(id = str_pad(id, 6, pad="0")) # allows us to merge with cases
+pop_df <- readRDS("codubi_2010_2023.rds") %>%
+  rename(pop = pobtot,
+         id = ubigeo,
+         year = ano)  %>%
+  mutate(year = as.numeric(year)) %>% 
+  select(pop, id, year)
 
-# add population column and calculate incidence
-case_df %<>% left_join(pop_df) %>%
-  mutate(inc = cases / pop)
+# handle districts without population reported in a year (assume it was the same as the following year)
+for(test_year in 2016:2010){
+  pop_df %>% 
+    filter(year %in% c(test_year, test_year+1)) %>%
+    group_by(id) %>%
+    summarize(frq = n()) %>% 
+    filter(frq < 2) %>%
+    select(id) %>%
+    unlist() -> missing
+  
+  pop_df %>% 
+    filter(id %in% missing & year == test_year + 1) %>%
+    mutate(year = test_year) %>%
+    rbind(pop_df) -> pop_df
+}  
+
 
 
 #### RUN MAIN ANALYSIS: MATCHING AND SYNTHETIC CONTROL, OUTPUT RESULTS  ####
 # run main analysis, plot all figures, and save output with "adm3-allper" prefix
-match_out_allper <- match_fun(anomaly_upper = .0085, anomaly_lower = .0085,
+
+match_out_allper <- match_fun(anomaly_upper = .0085, anomaly_lower = .007,
                               cases_2023 = cases_2023,
                               my_country = "PER3", 
                               match_num=10,
-                              plot_bal=TRUE, plot_map=TRUE, file_prefix="adm3-allper",
+                              plot_bal=TRUE, plot_map=TRUE, 
+                              file_prefix="adm3-allper",
                               map=per_map, big_map=dept_map)
 
-synth_out_allper <- synth_fun(case_df, match_out_allper, "adm3-allper", 
-                              att_plot=TRUE, spatt_plot=TRUE, map=per_map, big_map=dept_map, use_clim=TRUE,
-                              start_year = 2016)
+synth_out_allper <- synth_fun(case_df, match_out_allper, pop_df, "adm3-allper", 
+                              att_plot=TRUE, spatt_plot=FALSE, map=per_map, 
+                              big_map=dept_map, use_clim=TRUE, use_r0=FALSE,
+                              start_year = 2016, inc=TRUE)
+
+# save matching and synthetic control outputs
+save(match_out_allper, synth_out_allper, file="peru-main.RData")
 
 # Get names of treated districts
 read_xlsx("maps/UBIGEODISTRITOS.XLSX") %>%
@@ -186,24 +217,24 @@ synth_out_allper$gsynth_obj$est.att %>%
   mutate(end_date = start_date + 27) %>%
   mutate(start_date  = format(start_date, "%b %d"),
          end_date = format(end_date, "%b %d")) %>%
-  mutate(ATT = mid.num, CI.lower=lower.num, CI.upper=upper.num) %>%
+  mutate(ATT = mid.cases, CI.lower=lower.cases, CI.upper=upper.cases) %>%
   mutate(`Number Attributable Cases` = paste0(round(ATT), " (", round(CI.lower), " - ", round(CI.upper), ")")) %>%
   mutate(`Percent Attributable Cases` = paste0(round(mid.pct, digits=2)*100, " (", 
                                                round(lower.pct, digits=2)*100, ", ",
                                                round(upper.pct, digits=2)*100, ")"
   )) %>%
   mutate(`p-value` = round(recalc.p, digits=3)) %>%
-  rename(`Reported Cases` = "obs") %>%
-  mutate(`Number Non-Attributable Cases` = paste0(round(`Reported Cases` - mid.num), " (", round(`Reported Cases`- lower.num), " - ", round(`Reported Cases` - upper.num), ")")) %>%
+  rename(`Reported Cases` = "obs.cases") %>%
+  # mutate(`Number Non-Attributable Cases` = paste0(round(`Reported Cases` - mid.cases), " (", round(`Reported Cases`- lower.cases), " - ", round(`Reported Cases` - upper.cases), ")")) %>%
   mutate(`Dates` = paste(start_date, "-", end_date)) %>%
-  select(`Dates`, `Percent Attributable Cases`, `Number Attributable Cases`, `Number Non-Attributable Cases`, `Reported Cases`, `p-value`) %>%
-  xtable(., type = "latex", row.names=FALSE, digits=c(0,0,0,0,0,0,3)) %>%
+  select(`Dates`, `Percent Attributable Cases`, `Number Attributable Cases`, `Reported Cases`, `p-value`) %>%
+  xtable(., type = "latex", row.names=FALSE, digits=c(0,0,0,0,0,3)) %>%
   print(file = "adm3-allper_table.tex", include.rownames=FALSE)
 
 # Output table for covariate coefficients
 synth_out_allper$gsynth_obj$est.beta
 
-# Plot latent factor
+# Plot latent factors
 synth_out_allper$gsynth_obj$factor %>% 
   data.frame() %>% 
   mutate(time=row_number()) %>% 
@@ -213,49 +244,76 @@ synth_out_allper$gsynth_obj$factor %>%
   scale_x_continuous(breaks=synth_out_allper$year_ind,
                      labels=synth_out_allper$years)+
   theme_classic()+
-  theme(legend.position="none",
+  theme(legend.position="bottom",
         axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
   xlab("Time")
 
 ggsave("figs/lf-vals.pdf", height=4, width=4, units="in")
 
+# plot factor loadings on a map
+lp <- list()
+for(i in 1:5){
+  lp[[i]] <- data.frame("Loading" = synth_out_allper$gsynth_obj$lambda[,i],
+                        "id" = synth_out_allper$gsynth_obj$id) %>%
+    merge(per_map, .) %>%
+    ggplot()+
+    geom_sf(aes(fill=Loading), color="black", lwd=.3)+
+    geom_sf(data=dept_map, fill=NA, color="black", lwd=.6)+
+    theme_map()+
+    ggtitle(paste0("Latent Factor ",i))+
+    scale_fill_continuous_diverging(palette = "Purple-Green")
+}
+
+plot_grid(lp[[1]], lp[[2]],
+          lp[[3]], lp[[4]],
+          lp[[5]], nrow=3)
+
+ggsave("figs/fl-maps.pdf", height=8, width=8, units="in")
+
 
 # Output values of cyclone-attributable cases per thousand and sort by that
+dist_name <- coastal_dist <- read_xlsx("maps/UBIGEODISTRITOS.XLSX") %>%
+  mutate(IDDIST = str_pad(IDDIST, 6, pad="0")) %>%
+  rename(id = IDDIST)
+
 lapply(match_out_allper$treated_names, function(x)
-  synth_out_allper$gsynth_obj$group.output[[x]]$att.on %>% tail(9) %>% head(-1) %>% sum() %>% data.frame(att.cases = ., id=x)) %>%
+  synth_out_allper$gsynth_obj$group.output[[x]]$att.on %>% tail(9) %>% head(-1) %>% sum() %>% data.frame(att.inc = .*1000, id=x)) %>%
   do.call(rbind, .) %>%
-  left_join(pop_df) %>%
-  mutate(att.pt = att.cases/pop * 1000) %>% 
-  arrange(desc(att.pt))
+  arrange(desc(att.inc)) %>%
+  left_join(dist_name)
+
+
 
 #### RUN SUPPLEMENTAL ANALYSES ####
 ### Run for just coastal
-match_out_coast <- match_fun(anomaly_upper = .0085, anomaly_lower = .0085,
+match_out_coast <- match_fun(anomaly_upper = .0085, anomaly_lower = .007,
                              coastal_dist = coastal_dist, cases_2023 = cases_2023,
                              match_num=10,
                              my_country = "PER3", 
                              plot_bal=FALSE, plot_map=FALSE, file_prefix="adm3-coast",
                              map=per_map, big_map=dept_map)
 
-synth_out_coast <- synth_fun(case_df, match_out_coast, "adm3-coast",  
-                             att_plot=TRUE, spatt_plot=FALSE, map=per_map, use_clim=TRUE,
-                             start_year = 2016)
+synth_out_coast <- synth_fun(case_df, match_out_coast, pop_df, "adm3-coast",  
+                             att_plot=TRUE, spatt_plot=FALSE, map=per_map, use_clim=TRUE, use_r0=FALSE,
+                             start_year = 2016, inc=TRUE)
 
 
 ### Without climate covariates 
-synth_out_allper_noclim <- synth_fun(case_df, match_out_allper, "adm3-allper-noclim", 
+synth_out_allper_noclim <- synth_fun(case_df, match_out_allper, pop_df, "adm3-allper-noclim", 
                                      use_clim=FALSE,
                                      att_plot=TRUE, spatt_plot=FALSE, map=per_map,
-                                     start_year = 2016)
+                                     start_year = 2016, inc=TRUE)
 
-synth_out_coast_noclim <- synth_fun(case_df, match_out_coast, "adm3-coast-noclim", 
+synth_out_coast_noclim <- synth_fun(case_df, match_out_coast, pop_df, "adm3-coast-noclim", 
                                     use_clim=FALSE,
                                     att_plot=FALSE, spatt_plot=FALSE, map=per_map,
+                                    inc=TRUE,
                                     start_year = 2016)
+
 
 # compare no clim/with clim x coastal/all districts
 i <- 1
-rmse_df <- data.frame()
+rsq_df <- data.frame()
 scen_att_df <- data.frame()
 
 # grab number attributable cases and rmse for all models
@@ -267,8 +325,9 @@ for(df in list(synth_out_allper$gsynth_obj, synth_out_allper_noclim$gsynth_obj,
   match_str <- ifelse(i <= 2, "All", "Coastal")
   name_str <- paste(match_str, clim_str)
   
-  rmse_df %<>% rbind(., data.frame(name = name_str,
-                                   RMSE = df$rmse))
+  rsq_df %<>% rbind(., data.frame(name = name_str,
+                                  rsq = df$rsq))
+  
   
   # will plot attributable cases through end of year
   scen_att_df <-  df$est.att %>%
@@ -276,19 +335,20 @@ for(df in list(synth_out_allper$gsynth_obj, synth_out_allper_noclim$gsynth_obj,
     tail(10) %>%
     mutate(time = row_number(),
            name= name_str) %>%
-    select(mid.num, obs, lower.num, upper.num, name, time) %>%
+    select(mid.cases, obs.cases, lower.cases, upper.cases, name, time) %>%
     rbind(scen_att_df)
   
   i <- i + 1
 }
 
-# plot of RMSE
-scenarios_p1 <- rmse_df %>%
+# plot of R2
+scenarios_p1 <- rsq_df %>%
   ggplot()+
-  geom_bar(aes(x=name, y=RMSE, fill=name), stat="identity")+
+  geom_bar(aes(x=name, y=rsq, fill=name), stat="identity")+
   theme_classic() + 
   theme(legend.position="none")+
-  xlab("")
+  xlab("")+
+  ylab("R2")
 
 
 # make x-axis for below figure dates
@@ -300,19 +360,20 @@ epiweek_df <- data.frame(dates= seq.Date(from = as_date("2023-03-25"),
 # only keep observed cases calculated across all districts (instead of just coastal)
 scen_att_df %<>%
   group_by(time) %>%
-  summarize(obs = max(obs)) %>%
-  right_join(scen_att_df %>% select(-obs))
+  summarize(obs.cases = max(obs.cases)) %>%
+  right_join(scen_att_df %>% select(-obs.cases))
 
 # plot number of attributable cases over time
+
 scenarios_p2 <- scen_att_df %>%
   filter(time <= 10) %>%
   left_join(epiweek_df) %>%
   ggplot() +
-  geom_pointrange(aes(x=dates, y=mid.num, ymin=lower.num, ymax=upper.num, color=name), # 95% confidence interval for each model 
-                  size=.2, position=position_dodge(width=10))+
-  geom_line(aes(y=obs, x=dates))+
+  geom_pointrange(aes(x=dates, y=mid.cases, ymin=lower.cases, ymax=upper.cases, color=name), 
+                  size=.2, position=position_dodge(width=10))+ #95% confidence interval for each model
+  geom_line(aes(y=obs.cases, x=dates))+
   scale_color_discrete("")+
-  scale_x_date(date_breaks = "1 month", date_labels = "%b")+ # make nice x-axis
+  scale_x_date(date_breaks = "1 month", date_labels = "%b")+ #make nice x-axis
   theme_classic()+
   geom_hline(yintercept=0, linetype="dashed")+
   theme(legend.position="bottom")+
@@ -324,15 +385,56 @@ plot_grid(scenarios_p1, scenarios_p2+theme(legend.position="none"), rel_widths=c
   plot_grid(., get_legend(scenarios_p2), rel_heights=c(9,1), nrow=2)
 ggsave("figs/comp-scenarios.pdf", height=4, width=8)
 
+# Test effects of including relative R0 instead of mean temperature in model
+synth_out_r0 <- synth_fun(case_df, match_out_allper, pop_df, "adm3-allper-r0", 
+                          use_clim=TRUE, use_r0 = TRUE,
+                          att_plot=TRUE, spatt_plot=FALSE, map=per_map,
+                          start_year = 2016, inc=TRUE)
+
 ## Test effects of excluding observations prior to 2016 (by not setting start_year)
-synth_out_allper_pre16 <- synth_fun(case_df, match_out_allper, "adm3-allper-pre16", 
+synth_out_allper_pre16 <- synth_fun(case_df, match_out_allper, pop_df, "adm3-allper-pre16", 
                                     use_clim=TRUE,
-                                    att_plot=TRUE)
+                                    use_r0=FALSE,
+                                    att_plot=TRUE,
+                                    inc=TRUE)
+
+# Test effects of excluding heights of COVID-19 pandemic (2020 - 2021)
+synth_out_allper_nocovid <- synth_fun(case_df, match_out_allper, pop_df, "adm3-nocovid", 
+                                      att_plot=FALSE, spatt_plot=FALSE, 
+                                      map=per_map, big_map=dept_map, use_clim=TRUE, use_r0=FALSE,
+                                      exclude_year = c(2020, 2021), inc=TRUE)
+
+# manually plot so that the excluded years are properly accounted for 
+synth_out_allper_nocovid$gsynth_obj$est.att <- rbind(synth_out_allper_nocovid$gsynth_obj$est.att[1:130,],
+                                                     synth_out_allper_nocovid$gsynth_obj$est.att[1:26,]*NA,
+                                                     synth_out_allper_nocovid$gsynth_obj$est.att[131:156,])
+
+synth_out_allper_nocovid$gsynth_obj$Y.dat <- rbind(synth_out_allper_nocovid$gsynth_obj$Y.dat[1:130,],
+                                                   synth_out_allper_nocovid$gsynth_obj$Y.dat[1:26,]*NA,
+                                                   synth_out_allper_nocovid$gsynth_obj$Y.dat[131:156,])
+
+synth_out_allper_nocovid$gsynth_obj$Y.ct <- rbind(synth_out_allper_nocovid$gsynth_obj$Y.ct[1:130,],
+                                                  synth_out_allper_nocovid$gsynth_obj$Y.ct[1:26,]*NA,
+                                                  synth_out_allper_nocovid$gsynth_obj$Y.ct[131:156,])
+
+# extract population weights
+tr_pop <- pop_df %>% filter(year==2023 & id %in% act.locs) %>% select(pop, id) %>% distinct() %>% filter(!is.na(pop)) %>% select(pop) %>% sum()
+act.locs <- synth_out_allper_nocovid$gsynth_obj $id[synth_out_allper_nocovid$gsynth_obj$tr]
+act.pops <- sapply(act.locs, function(loc) pop_df$pop[which(pop_df$id == loc & pop_df$year == 2023)])
+act.weights <- unlist(act.pops)/tr_pop
+
+att_plot(case_df, synth_out_allper_nocovid$gsynth_obj,
+         synth_out_allper_nocovid$cyclone_step+26,
+         tr_pop, act.weights,
+         "adm3-nocovid",
+         # set year indices and years for x-axis
+         c(synth_out_allper_nocovid$year_ind, tail(synth_out_allper_nocovid$year_ind,1)+13, tail(synth_out_allper_nocovid$year_ind,1)+26),
+         sort(c(synth_out_allper_nocovid$years, 2020, 2021)),
+         inc=TRUE)
 
 ## Test effects of varying anomaly threshold for control vs treated
 # initialize variables to store values
-match_anomvar <- list() 
-synth_anomvar <- list()
+match_anomvar <- list()
 anomvar_df <- data.frame()
 
 for(anomaly_upper in c(.007, .0085, .01)){
@@ -348,7 +450,10 @@ for(anomaly_upper in c(.007, .0085, .01)){
       
       my_synth <- synth_fun(case_df, 
                             my_match, 
+                            pop_df, 
                             use_clim=TRUE,
+                            use_r0=FALSE,
+                            inc=TRUE,
                             start_year = 2016)
       
       # store desired values for plotting
@@ -359,10 +464,11 @@ for(anomaly_upper in c(.007, .0085, .01)){
                             temp_bal = my_match$balance[["mean_temp"]],
                             rain_bal = my_match$balance[["mean_rain"]],
                             rmse = my_synth$gsynth_obj$rmse,
-                            att.est = my_synth$att_nums$num_attr,
-                            att.lower = my_synth$att_nums$lower_ci,
-                            att.upper = my_synth$att_nums$upper_ci,
-                            num.cases = my_synth$att_nums$num_cases %>% as.numeric())
+                            rsq = my_synth$gsynth_obj$rsq,
+                            att.est = my_synth$att_nums$mid_pct,
+                            att.lower = my_synth$att_nums$lower_pct,
+                            att.upper = my_synth$att_nums$upper_pct,
+                            num.cases = my_synth$att_nums$mid_cases)
       
       anomvar_df %<>% rbind(this_df)
 
@@ -381,7 +487,7 @@ anomvar_df$anomaly_lower <- factor(anomvar_df$anomaly_lower, levels=c("5.5", "7"
 anomvar_df$anomaly_upper <- factor(anomvar_df$anomaly_upper, levels=c("7", "8.5", "10"))
 
 # these will go into the balance plot: p11 = Abs Mean Stand Diff for Temp, 
-# p12 = Abs Mean Stand Diff for Precip, p13 = RMSE
+# p12 = Abs Mean Stand Diff for Precip, p13 = Rsq
 anomvar_df %<>% distinct()
 anom_p11 <- anomvar_df %>%
   ggplot() + 
@@ -405,12 +511,12 @@ anom_p12 <- anomvar_df %>%
 
 anom_p13 <- anomvar_df %>%
   ggplot() + 
-  geom_bar(aes(x=anomaly_upper, y=rmse, fill=anomaly_lower), stat="identity", position="dodge")+
-  ggtitle("RMSE (Cases)")+
+  geom_bar(aes(x=anomaly_upper, y=rsq, fill=anomaly_lower), stat="identity", position="dodge")+
+  ggtitle("R2 (Cases)")+
   theme_classic()+
   theme(legend.position="none",  plot.title = element_text(size = 12))+
   scale_fill_viridis_d("Precip. Anomaly (Control Threshold)", direction=-1)+
-  ylab("RMSE")+
+  ylab("R2")+
   xlab("")
 
 anom_p1 <- plot_grid(anom_p11, anom_p12, anom_p13, nrow=1) %>%
@@ -420,8 +526,8 @@ anom_p1 <- plot_grid(anom_p11, anom_p12, anom_p13, nrow=1) %>%
 # plot of percent attributable cases depending on threshold, with 95% CI
 anom_p2 <-  anomvar_df %>%
   ggplot(aes(x=anomaly_upper, color=anomaly_lower)) + 
-  geom_pointrange(aes(y=att.est/num.cases*100, ymin=att.lower/num.cases*100, ymax=att.upper/num.cases*100),
-                  stat="identity", position = position_dodge2(width = .2))+ # plot CI
+  geom_pointrange(aes(y=att.est*100, ymin=att.lower*100, ymax=att.upper*100),
+                  stat="identity", position = position_dodge2(width = .2))+
   xlab("Precip. Anomaly (Cyclone-affected Threshold)")+
   ylab("Attributable \nCases (%)")+
   theme_classic()+
@@ -434,7 +540,7 @@ anom_p2 <-  anomvar_df %>%
 anom_p31 <- anomvar_df %>%
   ggplot() + 
   geom_bar(aes(x=anomaly_upper, y=nmatched, fill=anomaly_lower), stat="identity", position="dodge")+
-  ggtitle("Control Districts")+
+  ggtitle("Control")+
   theme_classic()+
   theme(legend.position="none",  plot.title = element_text(size = 12))+
   scale_fill_viridis_d("Precip. Anomaly (Control Threshold)", direction=-1)+
@@ -445,7 +551,7 @@ anom_p31 <- anomvar_df %>%
 anom_p32 <- anomvar_df %>%
   ggplot() + 
   geom_bar(aes(x=anomaly_upper, y=ntreated, fill=anomaly_lower), stat="identity", position="dodge")+
-  ggtitle("Cyclone-affected Districts")+
+  ggtitle("Cyclone-affected")+
   theme_classic()+
   theme(legend.position="none",  plot.title = element_text(size = 12))+
   scale_fill_viridis_d("Precip. Anomaly (Control Threshold)", direction=-1)+
@@ -457,7 +563,6 @@ anom_p3 <- plot_grid(anom_p31, anom_p32, nrow=1) %>%
   add_sub(label="Precip. Anomaly (Control Threshold)", size=12) %>%
   ggdraw()
 
-
 # generate full plot and save
 plot_grid(plot_grid(anom_p1, anom_p3, ncol=2, rel_widths=c(3,2), labels="AUTO"),
           anom_p2,
@@ -468,58 +573,65 @@ plot_grid(plot_grid(anom_p1, anom_p3, ncol=2, rel_widths=c(3,2), labels="AUTO"),
 ggsave(file="figs/anomaly-variation.png", height=6, width=10, units="in")
 
 ### Test out varying the number of control units to which each treated is matched (match number, mn)
-# initialize dataframe to store values
+# initialize dataframe and list to store values
 mnvar_df <- data.frame()
+mnvar_att <- list()
 
 for(i in 1:3){
   match_num <- c(5, 10, 15)[i]
   
   # for each value of match_num, rerun matching and synthetic control 
-  match_mn <- match_fun(anomaly_upper = .0085, anomaly_lower = .0085,
+  match_mn <- match_fun(anomaly_upper = .0085, anomaly_lower = .007,
                         cases_2023 = cases_2023,
                         my_country = "PER3",
                         file_prefix= NA,
                         match_num=match_num)
   
-  synth_mn <- synth_fun(case_df, match_mn, NA, use_clim=TRUE,
-                        start_year = 2016)
+  synth_mn <- synth_fun(case_df, match_mn, pop_df, NA, use_clim=TRUE, use_r0=FALSE,
+                        start_year = 2016, inc=TRUE)
   
   # store values
+  mnvar_att[[i]] <- synth_mn$gsynth_out$est.att
+  
   mnvar_df %<>% rbind(data.frame(match_num = match_num,
                                  nmatched = match_mn$match_names %>% length(),
                                  ntreated = match_mn$treated_names %>% length(),
                                  temp_bal = match_mn$balance[["mean_temp"]],
                                  rain_bal = match_mn$balance[["mean_rain"]],
                                  rmse = synth_mn$gsynth_obj$rmse,
-                                 att.est = synth_mn$att_nums$num_attr,
-                                 att.lower = synth_mn$att_nums$lower_ci,
-                                 att.upper = synth_mn$att_nums$upper_ci,
-                                 num.cases = synth_mn$att_nums$num_cases %>% as.numeric()))
+                                 rsq = synth_mn$gsynth_obj$rsq,
+                                 att.est = synth_mn$att_nums$mid_pct,
+                                 att.lower = synth_mn$att_nums$lower_pct,
+                                 att.upper = synth_mn$att_nums$upper_pct,
+                                 num.cases = synth_mn$att_nums$mid_cases))
   
   if(i == 3){
     # additional run for no matching
     i <- 4
     match_num <- "All"
     # edit the match_out dataframe to include everything in the control pool
-    match_mn$match_names <- filter(match_mn$df, is_control %in% c("Untreated", "Matched Control")) %>%
+    match_mn$match_names <- filter(match_mn$df, is_control %in% c("Cyclone-unaffected", "Matched Control")) %>%
       select(id) %>%
       unique() %>% 
       unlist()
     
     # conduct synthetic control analysis 
-    synth_mn <- synth_fun(case_df, match_mn, NA, use_clim=TRUE) 
-    
+    synth_mn <- synth_fun(case_df, match_mn, pop_df, NA, use_clim=TRUE, use_r0=FALSE,
+                          start_year = 2016, inc=TRUE)
     # store values
+    mnvar_att[[i]] <- synth_mn$gsynth_out$est.att
+    
     mnvar_df %<>% rbind(data.frame(match_num = "All",
                                    nmatched = match_mn$match_names %>% length(),
                                    ntreated = match_mn$treated_names %>% length(),
                                    temp_bal = match_mn$balance[["mean_temp"]],
                                    rain_bal = match_mn$balance[["mean_rain"]],
                                    rmse = synth_mn$gsynth_obj$rmse,
-                                   att.est = synth_mn$att_nums$num_attr,
-                                   att.lower = synth_mn$att_nums$lower_ci,
-                                   att.upper = synth_mn$att_nums$upper_ci,
-                                   num.cases = synth_mn$att_nums$num_cases %>% as.numeric()))
+                                   rsq = synth_mn$gsynth_obj$rsq,
+                                   att.est = synth_mn$att_nums$mid_pct,
+                                   att.lower = synth_mn$att_nums$lower_pct,
+                                   att.upper = synth_mn$att_nums$upper_pct,
+                                   num.cases = synth_mn$att_nums$mid_cases))
     
   }
 }
@@ -530,10 +642,8 @@ mnvar_df$match_num <- factor(mnvar_df$match_num, levels=c("5", "10", "15", "All"
 # in case anything was run twice by accident
 mnvar_df %<>% distinct()
 
-
-
 # these will go into the balance plot: p11 = Abs Mean Stand Diff for Temp, 
-# p12 = Abs Mean Stand Diff for Precip, p13 = RMSE
+# p12 = Abs Mean Stand Diff for Precip, p13 = Rsq
 mn_p11 <- mnvar_df %>%
   ggplot() + 
   geom_bar(aes(x=match_num, y=abs(temp_bal)), stat="identity")+
@@ -554,11 +664,11 @@ mn_p12 <- mnvar_df %>%
 
 mn_p13 <- mnvar_df %>%
   ggplot() + 
-  geom_bar(aes(x=match_num, y=rmse), stat="identity")+
-  ggtitle("RMSE (Cases)")+
+  geom_bar(aes(x=match_num, y=rsq), stat="identity")+
+  ggtitle("R2 (Cases)")+
   theme_classic()+
   theme(plot.title = element_text(size = 12))+
-  ylab("Abs. Mean Stand. Diff.")+
+  ylab("R2")+
   xlab("")
 
 mn_p1 <- plot_grid(mn_p11, mn_p12, mn_p13, nrow=1) %>%
@@ -568,9 +678,9 @@ mn_p1 <- plot_grid(mn_p11, mn_p12, mn_p13, nrow=1) %>%
 # plot of percent attributable cases depending on threshold, with 95% CI
 mn_p2 <-  mnvar_df %>%
   ggplot(aes(x=as.factor(match_num))) + 
-  geom_pointrange(aes(y=att.est/num.cases*100, ymin=att.lower/num.cases*100, ymax=att.upper/num.cases*100),
+  geom_pointrange(aes(y=att.est*100, ymin=att.lower*100, ymax=att.upper*100),
                   stat="identity")+
-  xlab("Precip. Anomaly (Cyclone-affected Threshold)")+
+  xlab("Matching Number")+
   ylab("Attributable \nCases (%)")+
   theme_classic()+
   theme(legend.position="bottom")+
@@ -581,7 +691,7 @@ mn_p2 <-  mnvar_df %>%
 mn_p31 <- mnvar_df %>%
   ggplot() + 
   geom_bar(aes(x=match_num, y=nmatched), stat="identity")+
-  ggtitle("Control Districts")+
+  ggtitle("Control")+
   theme_classic()+
   theme(legend.position="none",  plot.title = element_text(size = 12))+
   ylab("n")+
@@ -591,7 +701,7 @@ mn_p31 <- mnvar_df %>%
 mn_p32 <- mnvar_df %>%
   ggplot() + 
   geom_bar(aes(x=match_num, y=ntreated), stat="identity")+
-  ggtitle("Cyclone-affected Districts")+
+  ggtitle("Cyclone-affected")+
   theme_classic()+
   theme(legend.position="none",  plot.title = element_text(size = 12))+
   ylab("n")+
@@ -602,6 +712,7 @@ mn_p3 <- plot_grid(mn_p31, mn_p32, nrow=1) %>%
   add_sub(label="Matching Number", size=12) %>%
   ggdraw()
 
+
 # combine plots and save
 plot_grid(plot_grid(mn_p1, mn_p3, ncol=2, rel_widths=c(3,2), labels="AUTO"),
           mn_p2,
@@ -610,8 +721,6 @@ plot_grid(plot_grid(mn_p1, mn_p3, ncol=2, rel_widths=c(3,2), labels="AUTO"),
 
 ggsave(file="figs/matchnum-variation.png", height=6, width=10, units="in")
 
-
-
 ### Test out varying the number of latent factors
 # store values here
 synth_lf <- list()
@@ -619,51 +728,64 @@ synth_lf_df <- data.frame()
 
 for(lf_num in 0:5){
   # loop through number of latent factors (lf_num), using set of treated/control districts for main model
-  this_synth <- synth_fun(case_df, match_out_allper, use_clim=TRUE, "adm3-lfvar", 
-                          lf_num=lf_num, start_year = 2016)
+  this_synth <- synth_fun(case_df, match_out_allper, pop_df, use_clim=TRUE, 
+                          use_r0=FALSE, "adm3-lfvar", 
+                          lf_num=lf_num, start_year = 2016, inc=TRUE)
   
   # store outputs
   synth_lf[[lf_num+1]] <- this_synth
   
   synth_lf_df %<>% rbind(data.frame(lf_num = lf_num,
-                                    RMSE = this_synth$gsynth_obj$rmse,
-                                    IC = this_synth$gsynth_obj$IC,
-                                    PC = this_synth$gsynth_obj$PC,
-                                    att.est = this_synth$att_nums$num_attr,
-                                    att.lower = this_synth$att_nums$lower_ci,
-                                    att.upper = this_synth$att_nums$upper_ci,
-                                    num.cases = this_synth$att_nums$num_cases %>% as.numeric()))
+                                    rsq = this_synth$gsynth_obj$rsq,
+                                    att.est = this_synth$att_nums$mid_pct,
+                                    att.lower = this_synth$att_nums$lower_pct,
+                                    att.upper = this_synth$att_nums$upper_pct,
+                                    num.cases = this_synth$att_nums$mid_cases))
   
   # keep track of where we are by printing
   print(lf_num)
+  rm(this_synth)
 }
 
-# MSPE is hard-coded based on cross-validation printed in fitting the main model
-synth_lf_df$MSPE <- c(4132, 1804, 4516, 15335, 11063, 9036)
+# get cross-validation results
+synth_lf_df$MSPE <- synth_out_allper$gsynth_obj$CV.out.ife[,"MSPE"]
+synth_lf_df$IC <- synth_out_allper$gsynth_obj$CV.out.ife[,"IC"]
+synth_lf_df$PC <- synth_out_allper$gsynth_obj$CV.out.ife[,"PC"]
 
 # in case it ran twice, only show distinct entries
 synth_lf_df %<>% distinct()
 
 # plot the different balance metrics provided by the fect package as facets
-lf_p1 <- synth_lf_df %>% 
-  select(MSPE, IC, PC, lf_num) %>%
-  pivot_longer(MSPE:PC, names_to = "bal_metric", values_to="value") %>%
+lf_p1a <- synth_lf_df %>% 
   ggplot() + 
-  geom_bar(aes(x=lf_num, y=value), stat="identity")+
+  geom_bar(aes(x=lf_num, y=IC), stat="identity")+
   xlab("Number of Latent Factors")+
-  facet_wrap(~bal_metric, scale="free_y",
-             strip.position = "left")+
   theme_classic()+
   theme(legend.position="none")+
-  ylab("")+
-  theme(strip.background = element_blank(),
-        strip.placement = "outside")+
   scale_x_continuous(breaks=0:5)
+
+lf_p1b <- synth_lf_df %>% 
+  ggplot() + 
+  geom_bar(aes(x=lf_num, y=MSPE), stat="identity")+
+  xlab("Number of Latent Factors")+
+  theme_classic()+
+  theme(legend.position="none")+
+  scale_x_continuous(breaks=0:5)
+
+lf_p1c <- synth_lf_df %>% 
+  ggplot() + 
+  geom_bar(aes(x=lf_num, y=PC), stat="identity")+
+  xlab("Number of Latent Factors")+
+  theme_classic()+
+  theme(legend.position="none")+
+  scale_x_continuous(breaks=0:5)
+
+lf_p1 <- plot_grid(lf_p1a, lf_p1b, lf_p1c, ncol=3) 
 
 
 # plot percent attributable cases vs number of latent factors with 95% confidence intervals
 lf_p2 <- ggplot(synth_lf_df, aes(x=lf_num)) + 
-  geom_pointrange(aes(y=att.est/num.cases*100, ymin=att.lower/num.cases*100, ymax=att.upper/num.cases*100),
+  geom_pointrange(aes(y=att.est*100, ymin=att.lower*100, ymax=att.upper*100),
                   stat="identity", position = position_dodge2(width = .2))+
   xlab("Number of Latent Factors")+
   ylab("Attributable \nCases (%)")+
@@ -686,13 +808,13 @@ per_rename <- read_xlsx("maps/UBIGEODISTRITOS.XLSX") %>%
 
 # read in case data,
 # filter to the last week when there's data reported for all countries
-case_df_adm1<-read.csv("adm1_cases.csv") %>%
+case_df_adm1<-read.csv("D:/Attribution/adm1_cases.csv") %>%
   left_join(per_rename) %>%
   mutate(id = ifelse(!is.na(name), name, id)) %>%
   select(-name) %>%
-  mutate(inc = cases/pop) %>%
   filter(year < 2024) %>%
-  filter(year < 2023 | week <= 28)
+  filter(year < 2023 | week <= 28) %>%
+  distinct()
 
 # which regions reported cases in 2023? 
 cases_2023_adm1<-case_df_adm1 %>%
@@ -710,13 +832,18 @@ country_bounds <- five_map %>%
   summarize(geometry=st_union(geometry))
 
 # Run analysis
-match_out_adm1 <- match_fun(anomaly_upper = .007, anomaly_lower = .007,
+match_out_adm1 <- match_fun(anomaly_upper = .007, anomaly_lower = NA,
                             cases_2023 = cases_2023_adm1,
                             match_num=10,
                             my_country = c("PER", "COL1", "ECU1", "MEX", "BRA1"), 
                             plot_bal=FALSE, plot_map=FALSE, file_prefix="adm1",
-                            map=five_map, big_map=country_bounds)
+                            map=five_map, big_map=country_bounds,
+                            treated_names = extreme_adm1)
 
-synth_out_adm1 <- synth_fun(case_df_adm1, match_out_adm1, "adm1",  
-                            att_plot=TRUE, spatt_plot=FALSE, map=five_map, use_clim=TRUE,
-                            start_year = 2018, end_week=28, method="gsynth") # smaller number of treated districts, use gsynth method for inference
+pop_df_adm1 <- expand_grid(id=c(match_out_adm1$match_names, match_out_adm1$treated_names),
+                           year = 2018:2023)  %>% 
+  left_join(., (case_df_adm1 %>% select(id, pop) %>% distinct()))
+
+synth_out_adm1 <- synth_fun(case_df_adm1, match_out_adm1, pop_df_adm1, "adm1",  
+                            att_plot=TRUE, spatt_plot=FALSE, map=five_map, use_clim=TRUE, use_r0=FALSE,
+                            start_year = 2018, end_week=28, inc=TRUE, method="ife")# smaller number of treated districts, use gsynth method for inference

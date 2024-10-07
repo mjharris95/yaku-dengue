@@ -14,6 +14,9 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
   baldf <- match_out$df %>%
     filter(step <= cyclone_step)
   
+  
+  # NOTE TO SELF : ADD NEW BALANCE PLOT ABOUT MAHALANOBIS DISTANCE
+  
   # calculate the differences before matching
   prediff_df <-  lapply(1:length(match_out$treated_names), function(n)
     filter(baldf, !is_control == "Cyclone-affected") %>%
@@ -47,6 +50,8 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
     group_by(treated_id, step) %>%
     dplyr::summarize(rain_diff = mean(rain_diff),
               temp_diff = mean(temp_diff)) 
+  
+  
   
   # plots: each line is the mean standardized difference between a district and its matched controls
 
@@ -94,7 +99,6 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
     scale_x_continuous(breaks=year_ind, labels=years)+
     xlab("Time")
   
-  
   plot_grid(bal1, bal2, bal3, bal4, nrow=2, scale=.9,
             labels = c("A. Precipitation (Pre-Match)",
                        "B. Precipitation (Matched)",
@@ -103,6 +107,33 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
             hjust=-.1, label_size= 12, vjust=1)
   
   ggsave(paste0("figs/", file_prefix, "clim-stddiff.pdf"), height=8, width=8, units="in")
+  
+  # plot: avg standardized difference for each location before and after matching
+  avg_diff_df <- prediff_df %>%
+                  rename(pre_rain_diff = rain_diff,
+                         pre_temp_diff = temp_diff) %>%
+                  left_join(diff_df) %>%
+                  group_by(treated_id) %>%
+                  summarize(avg_rain_diff = mean(abs(rain_diff))/sd(baldf$mean_rain),
+                            avg_temp_diff = mean(abs(temp_diff))/sd(baldf$mean_temp),
+                            avg_pre_rain_diff = mean(abs(pre_rain_diff))/sd(baldf$mean_rain),
+                            avg_pre_temp_diff = mean(abs(pre_temp_diff))/sd(baldf$mean_temp))
+  
+  
+ plot_grid(ggplot(avg_diff_df)+
+    geom_point(aes(x=avg_pre_rain_diff, y=avg_rain_diff))+
+    geom_abline(a=0, b=1, linetype="dashed", color="red")+
+    theme_classic()+
+    xlim(c(0,1.75))+
+    ylim(c(0,1.75)),
+  ggplot(avg_diff_df)+
+    geom_point(aes(x=avg_pre_temp_diff, y=avg_temp_diff))+
+    geom_abline(a=0, b=1, linetype="dashed", color="red")+
+    theme_classic()+
+    xlim(c(0,1.75))+
+    ylim(c(0,1.75)))
+  
+
 }
 
 
