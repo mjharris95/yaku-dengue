@@ -1,18 +1,17 @@
 library(raster)
 library(terra)
 library(psych)
-library(tidyverse)
 
 per_map<-read_sf("maps/CDC_Distritos.shp") %>%
   rename(id = ubigeo)
 
-
-covar_df <- data.frame()
-
 files <- dir("cov")
 
+#exclude population density
+files <- files[!startsWith(files, "r_dpob")]
+
 # loop through covariate files
-for(file in tail(files[startsWith(files, "r_")],-5)){
+for(file in files[startsWith(files, "r_")]){
   
   # identify the department based on file name
   dept <-  file %>% 
@@ -25,15 +24,19 @@ for(file in tail(files[startsWith(files, "r_")],-5)){
   
   # issue with string splitting because LA LIBERTAD is two words
   dept <- ifelse(dept == "LIBERTAD", "LA LIBERTAD", dept)
+  dept <- ifelse(dept == "MARTIN", "SAN MARTIN", dept)
   
   # read in corresponding population density file
   dpob <-  switch(dept,
                   "TUMBES" = "r_dpob_TUMBES_050.tif",
                   "LA LIBERTAD" = "r_dpob_LA_LIBERTAD_050.tif",
                   "LAMBAYEQUE" = "r_dpob_LAMBAYEQUE_050.tif",
-                  "PIURA" = "r_dpob_PIURA_050.tif") %>%
+                  "PIURA" = "r_dpob_PIURA_050.tif",
+                  "CAJAMARCA" = "r_dpob_CAJAMARCA_050.tif",
+                  "SAN MARTIN" = "r_dpob_SAN_MARTIN_050.tif" ) %>%
     paste0("cov/", .) %>%
     rast()
+  
   
   # what is the variable name?
   var_name <- file %>% 
@@ -102,7 +105,6 @@ covar_df %<>%
   pivot_wider(names_from=var_name, values_from=avg_socio) %>%
   distinct()
 
-
 # append weather information during Cyclone Yaku
 covar_df <- read.csv("anomaly_df.csv") %>%
   dplyr::select(id, temp, rain) %>%
@@ -111,13 +113,13 @@ covar_df <- read.csv("anomaly_df.csv") %>%
 
 # deetrmine number of factors to use based on vss
 covar_df %>% 
-  dplyr::select(-c(id)) %>%
+  dplyr::select(-c(id, socio_vtp)) %>%
   vss(n=8, rotate="varimax", fm="mle")
 
 # run pca, store results
 covar_df %>% 
-  dplyr::select(-c(id)) %>%
-  principal(nfactors=2, rotate="varimax", scores=TRUE) -> pca_res
+  dplyr::select(-c(id, socio_vtp)) %>%
+  principal(nfactors=4, rotate="varimax", scores=TRUE) -> pca_res
 
 # extract labels for main variables in each rotated components,
 # use this to understand rotated components & helper for plotting
@@ -127,18 +129,23 @@ RC_labs <- pca_res$loadings %>%
   rownames_to_column() %>% 
   pivot_longer(starts_with("RC")) %>% 
   filter(abs(value) > 0.7) %>% 
-  # clean up variable names
+  # make this into the correct variable names
   mutate(lab = recode(rowname, 
                       "rain" = "Precipitation", 
-                      "vui" = "Flood Susceptibility",
-                      "socio_vpr" = "Low-quality Walls",
-                      "socio_vtc" = "Low-quality Floors")) %>%
-  mutate(lab = paste0(ifelse(value < 0, "- ", "+ "), 
-                      lab, " (",  round(value, 2), ")")) %>% 
+                      "vui" = "Flood susceptibility",
+                      "socio_vpr" = "Low-quality walls",
+                      "socio_vtc" = "Low-quality roofs",
+                      "temp" = "Temperature",
+                      "socio_vps" = "Low-quality floors",
+                      "socio_vtp" = "Low-quality housing",
+                      "socio_acc" = "Nonpublic \nwater source")) %>%
+  mutate(lab = paste0( #ifelse(value < 0, "- ", "+ "), 
+    lab, " (",  round(value, 2), ")")) %>% 
   group_by(name) %>% 
   arrange(name, desc(abs(value))) %>% 
   summarise(lab = paste(lab, collapse = "\n")) %>% 
   mutate(xval = as.numeric(gsub("RC", "", name)))
+
 
 # add RC values to dataframe
 pca_res$scores %>%
@@ -154,7 +161,7 @@ sapply(covar_df$id, function(dist_id) synth_out_allper$gsynth_obj$eff[eff_ind, w
   right_join(covar_df) -> covar_df
 
 # fit regression 
-mod.res <- lm(ATT~RC1+RC2, data=covar_df)
+mod.res <- lm(ATT~RC1+RC2+RC3+RC4, data=covar_df)
 mod <- mod.res$coefficients
 
 # get the bootstrapped attributable incidence estimates from the generalized synthetic control
@@ -165,20 +172,21 @@ boot_vals <- lapply(covar_df$id, function(id)
                "ATT" = .,
                "boot" = 1:1000)) %>%
   do.call(rbind, .) %>%
-  filter(!is.na(ATT)) 
+  filter(!is.na(ATT))
 
 # because of how the bootstrapping works, some of the districts were randomly resampled more than others
 # we randomly sample the same number of bootstrapped effect estimates for each district to ensure
 # our regression isn't biased toward a particular district
-boot_sample <-  group_by(id) %>%
+boot_sample <-  boot_vals %>%
+  group_by(id) %>%
   slice_sample(n=609) %>%
   ungroup()
 
 # for each bootstrap, refit the model and store the coefficients 
 # here, we're resampling across both cyclone-affected districts and their bootstrapped estimates
-suppressWarnings(boot_mod <- lapply(1:1000, function(i) slice_sample(boot_sample, n=45, replace=TRUE) %>% 
+suppressWarnings(boot_mod <- lapply(1:1000, function(i) slice_sample(boot_sample, n=55, replace=TRUE) %>%
                                       left_join(., covar_df %>% dplyr::select(-ATT), by="id") %>%
-                                      lm(ATT~RC1+RC2, data=.)  %>% 
+                                      lm(ATT~RC1+RC2+RC3+RC4, data=.)  %>% 
                                       summary() %>% 
                                       coef() %>% 
                                       data.frame() %>%
@@ -206,13 +214,14 @@ p1 <- boot_mod %>%
   ggplot() + 
   geom_point(aes(x=var, y=mid*1000), size=4)+
   geom_errorbar(aes(x=var, ymin=lower.CI*1000, ymax=upper.CI*1000), width=.1)+
-  geom_hline(linetype="dashed", yintercept=0)+
+  geom_hline(linetype="dashed", yintercept=0, color="maroon")+
   geom_label(data = RC_labs, 
-             aes(x = name, label = lab), y = 20, size = 2.5, fontface = 2)+
+             aes(x = name, label = lab, y = y), size = 2)+
   theme_classic()+
   scale_y_continuous(limits=c(-10, 25))+
-  ylab("Cyclone-attributable cases per thousand")+
-  xlab(" ")
+  ylab("Cyclone-attributable \ncases per thousand")+
+  xlab("Factor")+
+  theme(text=element_text(size=10))
 
 # plot the temperature vs cyclone-attributable cases
 p2 <- boot_vals %>% 
@@ -221,14 +230,17 @@ p2 <- boot_vals %>%
             max.eff = quantile(ATT, .975)) %>%
   right_join(covar_df) %>%
   ggplot() + 
-  geom_pointrange(aes(x=temp, y=ATT*1000, ymin=min.eff*1000, ymax=max.eff*1000), size=.3, alpha=.6)+
+  geom_linerange(aes(x=temp,ymin=min.eff*1000, ymax=max.eff*1000), 
+                 color="gray", alpha=.6, linewidth=.3)+
+  geom_point(aes(x=temp, y=ATT*1000),
+             size=1, alpha=.6)+
   theme_classic()+
-  # visual guides: null effect as horizontal line and potential thermal threshold as vertical line
+  # visual guides: null effect and 24C
   geom_hline(yintercept=0, linetype="dashed", color="maroon") +
   geom_vline(xintercept=24, linetype="dashed", color="maroon") +
   xlab("Mean Temperature During Yaku (C)")+
-  ylab("Cyclone-attributable cases per thousand")
+  ylab("Cyclone-attributable \ncases per thousand")+
+  theme(text=element_text(size=10))
 
-
-plot_grid(p1, p2, nrow=1, labels="AUTO")
-ggsave(paste0("figs/vul-ind.pdf"), height=4, width=8, units="in")
+plot_grid(p1, p2, nrow=2, labels="AUTO")
+ggsave(paste0("figs/vul-ind.pdf"), height=11, width=11, units="cm")
