@@ -257,11 +257,11 @@ matchmap_plot <- function(map, big_map, file_prefix, match_out,
     merge(map, ., all.x=TRUE)
   
   # indicate buffer zones
-  map$is_control <- ifelse(map$id %in% buffer_zone, "Buffer District", map$is_control)
+  map$is_control <- ifelse(map$id %in% buffer_zone, "Buffer Districts", map$is_control)
   
   # indicate places without cases in 2023
   if(length(cases_2023) > 0){
-    map$is_control <- ifelse(! map$id %in% cases_2023, "No Cases", map$is_control)
+    map$is_control <- ifelse(! map$id %in% cases_2023, "No Cases in 2023, Excluded", map$is_control)
   }
   
   # indicate places that are not coastal
@@ -269,11 +269,8 @@ matchmap_plot <- function(map, big_map, file_prefix, match_out,
     map$is_control <- ifelse(! map$id %in% coastal_dist, "Non-Coastal", map$is_control)
   }
   
-  # rename Cyclone-unaffected column
-  map$is_control <- ifelse(map$is_control == "Cyclone-unaffected", "Control (Unmatched)", map$is_control)
   
-  
-# generate and save plot
+  # generate and save plot
   ggplot()+
     geom_sf(data = map, aes(fill=is_control))+
     geom_sf(data = big_map, fill=NA, color="black", lwd=.8) + # bolds borders of big_map
@@ -287,73 +284,78 @@ matchmap_plot <- function(map, big_map, file_prefix, match_out,
 #### TREATMENT EEFFECT PLOT ####
 # Returns a plot of actual vs counterfactual cases and cyclone-attributable cases over time
 #
-# Inputs: gsynth_out: gsynth object (can acess by running fect or calling the $gsynth_out entry from synth_fun)
+# Inputs: case_df: a dataframe of case reports by week, year, and unit id
+#         gsynth_out: gsynth object (can acess by running fect or calling the $gsynth_out entry from synth_fun)
 #         cyclone_step: index when cyclone occurred (can be retrieved from synth_fun)
+#         pop: full population size of the cyclone-affected districts 
+#         pop.weights: population weights for the cyclone-affected districts (in the orde rof gsynth_out$tr)
 #         file_prefix: prefix to save pdf image
 #         years: the years over which climate data is provided (can be retrieved from match_fun)
 #         year_ind: the indices for when a new year starts (can be retrieved from match_fun)
 # Output: a pdf figure in the figs folder with suffix -att
-att_plot <- function(gsynth_out, cyclone_step, file_prefix,
-                     year_ind, years){
+att_plot <- function(case_df, gsynth_out, cyclone_step, 
+                     pop, pop.weights, file_prefix,
+                     year_ind, years, 
+                     inc=TRUE){
+
+  # identify treated indices
+  treated_ind <- gsynth_out$D.dat %>% colSums() > 0
+  
+  # create dataframe of treatment effects
+  att_df <- gsynth_out$est.att %>%
+    data.frame() %>%
+    mutate(t=row_number()) # will use this to convert time indices to dates
+  
+  # convert from incidence to cases 
+    att_df %<>% 
+    mutate(mid.num = mid.num*pop,
+           CI.lower = CI.lower*pop,
+           CI.upper = CI.upper*pop)
 
   
-  att2 <- gsynth_out$est.att %>%
-            data.frame() %>%
-            mutate(t=row_number()) %>% # will use this to convert time indices to dates
+  
+  att2 <-  att_df %>%
             ggplot() + 
-            geom_ribbon(aes(x=t, ymin = lower.num, ymax = upper.num), fill="grey70")+ # 95% confidence interval
+            geom_ribbon(aes(x=t, ymin = CI.lower, ymax = CI.upper), fill="grey70")+ # 95% confidence interval
             geom_line(aes(x=t, y = mid.num))+
-            scale_x_continuous(breaks=year_ind, # convert to years x-axis
+            scale_x_continuous(breaks=year_ind,  # convert to years x-axis
                                labels=years)+
             geom_hline(yintercept=0, color="maroon", linetype="dashed")+
-            geom_vline(xintercept=cyclone_step, color="maroon", linetype="dashed")+ # indicate cyclone index
+            geom_vline(xintercept=cyclone_step, color="maroon", linetype="dashed")+  # indicate cyclone index
             xlab("Time (Years)")+
-            ylab("Cyclone-attributable cases")+
+            ylab("Cyclone-Attributable Cases")+
             ggtitle("")+
             theme_classic()+
-            theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+            theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+                  text=element_text(size=14))
           
-  ts_cases <- rbind(gsynth_out$Y.ct[,gsynth_out$tr] %>% # counterfactual cases in cyclone-affected districts
-                      t() %>% 
-                      data.frame() %>%
-                      cbind(id= gsynth_out$id[,gsynth_out$tr]) %>% 
-                      pivot_longer(!id,
-                                   names_prefix="X",
-                                   names_to="time",
-                                   values_to="cases") %>%
-                      mutate(time = as.numeric(time)) %>%
-                      mutate(group = "Synthetic Control"), #label all of these as belonging to synthetic control
-                    gsynth_out$Y.dat[,gsynth_out$tr] %>% # actual cases in cyclone-affected units
-                      t() %>% 
-                      data.frame() %>%
-                      cbind(id= gsynth_out$id[gsynth_out$tr]) %>%
-                      pivot_longer(!id,
-                                   names_prefix="X",
-                                   names_to="time",
-                                   values_to="cases") %>%
-                      mutate(time = as.numeric(time)) %>%
-                      mutate(group = "Observed"))  #indicate that these are observed
+  ts_cases <- gsynth_out$Y.ct[,treated_ind] %>% # counterfactual cases in cyclone-affected districts
+                apply(1, function(x) sum(x*pop.weights)*pop) %>% # convert from incidence to raw cases, sum across districts
+                data.frame(cases=.) %>%
+                mutate(time = row_number(),
+                       group="Synthetic Control") %>% # label these as belonging to synthetic control
+                rbind(data.frame(group="Observed", # actual cases in cyclone-affected units
+                                 cases = gsynth_out$est.att$obs.cases) %>%
+                        mutate(time = row_number()))
   
   
-  att1 <- ts_cases %>%  
-    group_by(time, group) %>% # aggregate to total cases at each timepoint
-    dplyr::summarize(cases=sum(cases,na.rm=TRUE)) %>%
-    ggplot() +
-    geom_line(aes(x=time, y = cases, color=group, linewidth=group))+
-    ggtitle("")+
-    scale_color_manual("", breaks=c("Synthetic Control", "Observed"), # colors indicate observed vs synthetic control
-                       values = c("red", "black"))+
-    scale_linewidth_manual("", breaks=c("Synthetic Control", "Observed"),
-                           values = c(.2, .5))+ # different linewidth to increase visibility when overlapping
-    scale_x_continuous(breaks=year_ind, # change x-axis to years
-                       labels=years)+
-    xlab('Time (Years)')+
-    ylab("Dengue Cases")+
-    geom_vline(xintercept=cyclone_step, color="maroon", linetype="dashed")+ #indicate when cyclone occurred
-    theme_classic()+
-    theme(legend.position="bottom")+
-    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-  
+  att1 <- ts_cases %>%
+            ggplot() +
+            geom_line(aes(x=time, y = cases, color=group, linewidth=group))+
+            ggtitle("")+
+            scale_color_manual("", breaks=c("Synthetic Control", "Observed"),  # colors indicate observed vs synthetic control
+                               values = c("red", "black"))+ 
+            scale_linewidth_manual("", breaks=c("Synthetic Control", "Observed"),
+                                   values = c(.2, .5))+  # different linewidth to increase visibility when overlapping
+            scale_x_continuous(breaks=year_ind, # change x-axis to years
+                               labels=years)+
+            xlab('Time (Years)')+
+            ylab("Dengue Cases")+
+            geom_vline(xintercept=cyclone_step, color="maroon", linetype="dashed")+ # change x-axis to years
+            theme_classic()+
+            theme(legend.position="bottom")+
+            theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+                  text=element_text(size=14))
   
   plot_grid(plot_grid(att1+theme(legend.position="none"), att2, ncol=2, labels="AUTO"),
             plot_grid(get_legend(att1), "", ncol=2), nrow=2, rel_heights=c(9,1))
@@ -363,19 +365,28 @@ att_plot <- function(gsynth_out, cyclone_step, file_prefix,
 
 #### GET NUMBERS OF ATTRIBUTABLE CASES ####
 # Returns numbers of attributable cases over a specified post-cyclone time period
+# and prints key values
 #
 # Inputs: gsynth_out: gsynth object (can acess by running fect or calling the $gsynth_out entry from synth_fun)
+#         case_df: a dataframe of case reports by week, year, and unit id
 #         cyclone_step: index when cyclone occurred (can be retrieved from synth_fun)
 #         tr_ind: optional, rownames (from gsynth_out$est.att) across which to sum treatment effect
 #                 preset to timesteps when p < 0.05 for main analysis
 # Output: a list of values calculated across the period specified by tr_ind, entries as follows
-#         num_attr: the number of cases attributable to the cyclone
-#         lower_ci: the lower estimate for 95% confidence interval on attributable cases
-#         upper_ci: the upper estimate for 95% confidence interval on attributable cases
-#         pct_cases: the percent of cases attributable to the cyclone
-#         num_cases: the number of reported cases
+#         mid_inc: cyclone-attributable incidence
+#         lower_inc: the lower estimate for 95% confidence interval on cyclone-attributable incidence
+#         upper_inc: the upper estimate for 95% confidence interval on cyclone-attributable incidence
+#         lower_pct: the lower estimate for 95% confidence interval on percent attributable cases
+#         upper_pct: the upper estimate for 95% confidence interval on percent attributable cases
+#         mid_pct: the percent of cases attributable to the cyclone
+#         obs_inc: observed incidence
+#         obs_cases: observed cases
+#         mid_cases: the number of cyclone-attributable cases 
+#         lower_cases: the lower estimate for 95% confidence interval on attributable cases
+#         upper_cases: the uppe restimate for 95% confidence interval on attributable cases
 
-att_print <- function(gsynth_out, cyclone_step,
+att_print <- function(gsynth_out, case_df, cyclone_step,
+                      pop_weights, pop,
                       tr_ind = c("3", "4", "5", "6", "7", "8", "9", "10")){
   
   # will use these to select cyclone-affected entries
@@ -383,27 +394,33 @@ att_print <- function(gsynth_out, cyclone_step,
   ntreated <- length(treated_ind)
   time_ind <- which(rownames(gsynth_out$est.att) %in% tr_ind)
   
-  # across each bootstrap, calculate the proportion attributable cases during period indicated by time_ind
-  pct_quants <- sapply(1:1000, function(n) sum(gsynth_out$att.boot[time_ind,n]*ntreated, na.rm=TRUE)/(gsynth_out$Y.boot[[n]][time_ind, 1:ntreated] %>% sum(na.rm=TRUE))) %>%
+  # across each bootstrap, calculate the proportion attributable cases during period indicated by tr_ind
+  pct_quants <- sapply(1:length(gsynth_out$Y.boot), function(n) sum(gsynth_out$att.W.boot[time_ind,n], na.rm=TRUE)/(gsynth_out$Y.boot[[n]][time_ind, 1:ntreated] %>% colSums() %>% `*`(pop_weights[[n]]) %>% sum())) %>%
     quantile(c(.025, .975))
   
+  # sum cyclone-attributable incidence over selected time period
   num_attr <- gsynth_out$est.att[time_ind,] %>%
     select(mid.num) %>%
     sum()
   
-  num_cases <- gsynth_out$Y.dat[time_ind, treated_ind] %>% rowSums() %>% sum() %>% as.numeric()
+  # sum observed incidence over selected time period
+  num_inc <- gsynth_out$est.att$obs.inc[time_ind] %>% sum()
   
   # create list of values
-  vals <- list(num_attr=num_attr,
-                 lower_ci=num_cases*as.numeric(pct_quants[1]),
-                 upper_ci=num_cases*as.numeric(pct_quants[2]),
-                 lower_pct=as.numeric(pct_quants[1])*100,
-                 upper_pct=as.numeric(pct_quants[2])*100,
-                 pct_cases=num_attr/num_cases*100,
-                 num_cases=num_cases)
+  vals <- list(mid_inc=num_attr,
+               lower_inc=num_inc*as.numeric(pct_quants[1]),
+               upper_inc=num_inc*as.numeric(pct_quants[2]),
+               lower_pct=as.numeric(pct_quants[1]),
+               upper_pct=as.numeric(pct_quants[2]),
+               mid_pct=num_attr/num_inc,
+               obs_inc=num_inc,
+               obs_cases=num_inc*pop,
+               mid_cases=num_attr*pop,
+               lower_cases=lower_inc*pop,
+               upper_cases=upper_inc*pop)
   
   # print the main result, including percent attributable cases
-  print(paste0(round(vals$num_attr), " (", round(vals$lower_ci), ", ", round(vals$upper_ci), ") cases were attributable to the cyclone, out of ", vals$num_cases, " (", round(vals$num_attr/vals$num_cases*100, digits=2), "%)"))
+  print(paste0(round(vals$mid_cases), " (", round(vals$lower_cases), ", ", round(vals$upper_cases), ") cases were attributable to the cyclone, out of ", vals$obs_cases, " (", round(vals$mid_pct*100, digits=2), "%)"))
   
   return(vals)
 }
@@ -425,7 +442,7 @@ att_print <- function(gsynth_out, cyclone_step,
 #                 preset to timesteps when p < 0.05 for main analysis
 # Output: a pdf figure in the figs folder with suffix spatt-map
 
-spatt_plot <- function(pop_df, gsynth_out, map, big_map, file_prefix,
+spatt_plot <- function(gsynth_out, map, big_map, file_prefix,
                        tr_ind=c("3", "4", "5", "6", "7", "8", "9", "10")){
   
   time_ind <- which(rownames(gsynth_out$est.att) %in% tr_ind)
