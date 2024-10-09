@@ -433,8 +433,7 @@ att_print <- function(gsynth_out, case_df, cyclone_step,
 # Note that this script would need to be modified to apply to countries other than Peru
 # because the facet labels are specified to match districts back to Peruvian regions
 #
-# Inputs: pop_df: a dataframe with columns pop (population size) and id of treated districts (id should correspond to those in map)
-#         gsynth_out: gsynth object (can acess by running fect or calling the $gsynth_out entry from synth_fun)
+# Inputs: gsynth_out: gsynth object (can access by running fect or calling the $gsynth_out entry from synth_fun)
 #         map: shapefile of spatial units at level used for analysis
 #         big_map: shapefile of spatial units at higher administrative division to indicate borders
 #         file_prefix: prefix to save pdf image
@@ -447,36 +446,34 @@ spatt_plot <- function(gsynth_out, map, big_map, file_prefix,
   
   time_ind <- which(rownames(gsynth_out$est.att) %in% tr_ind)
   
-  # create a datadrame with columns att (# attributable cases) and id
+  # create a dataframe with columns att (# attributable cases) and id
   # summed across period specified by tr_ind in treated districts
-  spatt_map <- gsynth_out$eff[time_ind, gsynth_out$tr] %>%
+  att_pc_df <- gsynth_out$eff[time_ind, gsynth_out$tr] %>%
     colSums(na.rm=TRUE) %>%
     data.frame(att = .,
                id = gsynth_out$id[gsynth_out$tr]) 
+    mutate(att_pc = att * 1000) 
   
-  # will use population size to calculate cases per thousand people
-  pop_help <- pop_df %>% 
-    select(pop, id) %>% 
-    distinct() 
-
-  # map of attributable cases
-  att_pc_df <-  spatt_map %>%
-    left_join(pop_help) %>%
-    mutate(att_pc = att/pop * 1000) # calculate attributable cases per thousand people
-  merge(map, att_pc_df) %>% # append to map of districts
-    rename(`Cyclone-Attributable \nCases per Thousand)` = att_pc)  %>%
+  spatt_map <- merge(map, att_pc_df) %>% # append to map of districts
+    rename(`Attributable Cases \n(per Thousand)` = att_pc)  %>%
     ggplot()+
-    geom_sf(aes(fill=`Cyclone-attributable \nCases per Thousand)`), color="black", lwd=.3)+
+    geom_sf(aes(fill=`Attributable Cases \n(per Thousand)`), color="black", lwd=.3)+
     geom_sf(data=big_map, fill=NA, color="black", lwd=.8)+ # add big_map borders
-    scale_fill_stepsn(colours=c("#1919A4", "#8C8CD1", "#FFFFFF", "#FF7F7F", "#FF0000", "#BA0007", "#75000E", "#5B000B", "#420008", "black"),
-                      breaks=c(-10, -5, 0, 5, 10, 15, 20, 25, 30),
-                      labels=c(-10, "", 0, "", 10, "", 20, "", ">30"))+ #colors specified for main analysis, may wish to modify breaks for a different mode
+    scale_fill_stepsn(colours=c("#7E64C5", "#FFFFFF", "#FF7F7F", "#FF0000", "#BA0007", "#75000E", "#5B000B", "#420008", "#73000E", "black"),
+                      breaks=c(-5, 0, 5, 10, 15, 20, 25, 30),
+                      labels=c("", 0, "", 10, "", 20, "", ">30"))+ #colors specified for main analysis, may wish to modify breaks for a different mode
     ylim(c(-9, -3))+
     xlim(c(-82, -77))+
     theme_void()+
-    theme(legend.position="bottom") -> spatt_map
+    theme(legend.position="bottom")
   
   # begin processing for the time series plots
+  spatt_df <-  gsynth_out$eff[,gsynth_out$tr] %>% 
+    tail(10) %>% # go from march through the end of 2023
+    data.frame() %>%
+    mutate(step = row_number()) # will use this column to convert to dates
+  
+  
   spatt_df <-  gsynth_out$eff[,gsynth_out$tr] %>% 
     tail(10) %>%  # go from march through the end of 2023
     data.frame() %>%
@@ -492,9 +489,9 @@ spatt_plot <- function(gsynth_out, map, big_map, file_prefix,
   
   # will use this to group districts by region
   dept_name <-  read_xlsx("maps/UBIGEODISTRITOS.XLSX") %>%
-    rename(id = IDDIST,
-           departamento = NOMBDEP) %>%
-    select(id, departamento) 
+                  rename(id = IDDIST,
+                         departamento = NOMBDEP) %>%
+                  select(id, departamento)  
   
   # regions that include at least one treated district, ordered to correspond with geographic position when faceted
   dept_name$departamento <- factor(dept_name$departamento, levels=c("TUMBES", "CAJAMARCA", "PIURA", "SAN MARTIN", "LAMBAYEQUE", "LA LIBERTAD"))
@@ -502,25 +499,24 @@ spatt_plot <- function(gsynth_out, map, big_map, file_prefix,
   spatt_scatter <- spatt_df %>% 
     left_join(epiweek_df) %>%
     select(-step) %>%
-    pivot_longer(!dates,     # pivot so we can plot each district as its own line
+    pivot_longer(!dates, # pivot so we can plot each district as its own line
                  names_to = "id", 
                  values_to = "TE")  %>%
     left_join(dept_name) %>%
-    left_join(pop_help) %>%
-    mutate(TE_pc = TE/pop * 1000) %>%   # calculate attributable cases per thousand people
+    mutate(TE_pc = TE * 1000) %>% # calculate attributable cases per thousand people
     ggplot(aes(y=TE_pc, x=dates, group=id)) +
     geom_line(linewidth=.2, alpha=.5)+
     theme_classic()+
     facet_wrap(~departamento, ncol=2, scales="free")+ # gives axes to all plots
-    ylab("Cyclone-attributable \ncases per thousand")+
+    ylab("Attributable Cases (per Thousand)")+
     xlab("Time")+
     theme(legend.position="none")+
     scale_x_date(date_breaks = "2 months", date_labels = "%b")+ # make the x-axis (time) nice
     geom_hline(yintercept=0, color="maroon", linetype="dashed")+ # indicate zero attributable cases
-    scale_y_continuous(limits=c(-10, 50)) # may need to change this of not plotting main analysisx
+    scale_y_continuous(limits=c(-10, 50)) # may need to change this if not plotting main analysis
   
-  # plot_grid(spatt_scatter)
-  # ggsave(paste0("figs/", file_prefix, "-spatt-scatter.pdf"), height=6, width=8, units="in", dpi=700)
+  plot_grid(spatt_scatter)
+  ggsave(paste0("figs/", file_prefix, "-spatt-scatter.pdf"), height=6, width=8, units="in", dpi=700)
   
   plot_grid(spatt_map, spatt_scatter, ncol = 2, labels="AUTO") # combine both plots into a grid
   
@@ -547,7 +543,9 @@ spatt_plot <- function(gsynth_out, map, big_map, file_prefix,
 #         file_prefix: prefix to save pdf image (if plot_bal or plot_map is true)
 #         map: shapefile of spatial units at level used for analysis (if plot_map is true)
 #         big_map: shapefile of spatial units at higher administrative division to indicate borders (if plot_map is true)
+#         treated_names: leave empty to use the default defined by anomaly_upper, otherwise override and set your own treated districts
 # Output: a pdf figures in the figs folder if requested and a list with the following entries
+#         table: a table describing mean values across cyclone-unaffected, cyclone-affected, and control groups
 #         match_names: names of the units included in matched control pool
 #         df: climate covariates over time and designation (treated, Cyclone-unaffected, control) for each district
 #         treated_names: names of treated units
@@ -558,7 +556,7 @@ spatt_plot <- function(gsynth_out, map, big_map, file_prefix,
 #         years: the years over which climate data is provided 
 #         year_ind: the indices for when a new year starts 
 #         cyclone_step: the index when the cyclone occured
-match_fun <- function(anomaly_upper = .0085, anomaly_lower = .0085,
+match_fun <- function(anomaly_upper = .0085, anomaly_lower = .007,
                       coastal_dist = c(), cases_2023 = c(),
                       my_country = "PER3", 
                       match_num = 10, 
@@ -574,13 +572,20 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .0085,
   if((plot_map==TRUE) & (is.null(map) | is.null(big_map))){
     stop("Provide map to plot")
   }
-  
-  # identify treated, Cyclone-unaffected, and buffer units in Peru and Ecuador based on upper/lower anomaly threshold
+    
+  # identify treated, Cyclone-unaffected, and buffer units in Peru based on upper/lower anomaly threshold
   anomaly_df <- read.csv("anomaly_df.csv")
+  
   anomaly_df %>% filter(diff_rain>anomaly_upper & country %in% c("PER3", "PER")) %>% select(id) %>% unique() %>% unlist() -> extreme_ids
   anomaly_df %>% filter(diff_rain<=anomaly_lower) %>% select(id) %>% unique() %>% unlist() -> nonextreme_ids
-  anomaly_df %>% filter(diff_rain>anomaly_upper & diff_rain<=anomaly_lower) %>% select(id) %>% unique() %>% unlist() -> buffer_ids
+  anomaly_df %>% filter(diff_rain<anomaly_upper & diff_rain>=anomaly_lower) %>% select(id) %>% unique() %>% unlist() -> buffer_ids  
   
+  
+  # override cyclone-affected districts if manually provided 
+  if(length(treated_names)>0){
+    extreme_ids <- treated_names 
+  }
+    
   # read in climate dataframe for matching
   clim_df <- read.csv("clim_df.csv") 
   
@@ -598,7 +603,7 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .0085,
   }
   
   clim_df %<>%
-    # focus on the request spatial units
+    # focus on the requested spatial units
     filter(country %in% my_country) %>%
     filter(!is.na(rain)) %>%
     filter(id %in% coastal_dist_set) %>%
@@ -637,10 +642,10 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .0085,
     filter(! step %in% step_filter) %>%
     group_by(id, country, step) %>%
     dplyr::summarize(mean_rel_r0 = mean(rel_r0),
-              mean_rain = mean(rain),
-              mean_temp = mean(temp),
-              int = max(int),
-              date_end = max(date)) %>%
+                     mean_rain = mean(rain),
+                     mean_temp = mean(temp),
+                     int = max(int),
+                     date_end = max(date)) %>%
     mutate(mean_rain = mean_rain * 1000) %>%
     # format for matching package
     transform(place = as.integer(as.factor(id))) %>%
@@ -651,7 +656,9 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .0085,
                     select(step) %>%
                     distinct())
   
-  # do not conduct any matching, just compare treated vs Cyclone-unaffected units
+  cyclone_step <- lag_num+1
+  
+  # do not conduct any matching, just compare cyclone-affected vs Cyclone-unaffected units
   unmatch_res <- PanelMatch(lag = lag_num, time.id = "step", unit.id = "place",
                             treatment = "int", refinement.method = "none",
                             data = clim_df, match.missing =FALSE,
@@ -660,7 +667,7 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .0085,
                             covs.formula = ~ mean_temp + mean_rain,
                             outcome.var = "mean_rain")
   
-  # conduct matching for each of the treated units
+  # conduct matching for each of the cyclone-affected units
   match_res <- PanelMatch(lag = lag_num, time.id = "step", unit.id = "place",
                           treatment = "int", refinement.method = "mahalanobis",
                           data = clim_df, match.missing =FALSE,
@@ -705,12 +712,13 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .0085,
     mutate(is_control = "Cyclone-unaffected",
            weight = 1) %>%
     rbind(match_df) %>% # we need to also have the matched control units counted in the Cyclone-unaffected pool
-    group_by(is_control) %>% 
-    dplyr::summarize(`Mean Temp.` = weighted.mean(mean_temp, weight), # weighted average and standard deviation
-              `Mean Precip.` = weighted.mean(mean_rain, weight),
-              `Sd. Temp.` = sqrt(Hmisc::wtd.var(mean_temp, weight)),
-              `Sd. Precip.` = sqrt(Hmisc::wtd.var(mean_rain, weight)),
-              n = length(unique(id))) 
+    group_by(is_control) %>%
+    # weighted averages and standard deviations
+    dplyr::summarize(`Mean Temp.` = paste0(mean(mean_temp), " (", weighted.mean(mean_temp, weight), ")"), 
+                     `Mean Precip.` = paste0(mean(mean_rain), " (", weighted.mean(mean_rain, weight), ")"),
+                     `Sd. Temp.` = paste0(sd(mean_temp), " (", sqrt(Hmisc::wtd.var(mean_temp, weight)), ")"),
+                     `Sd. Precip.` = paste0(sd(mean_rain), " (", sqrt(Hmisc::wtd.var(mean_rain, weight)), ")"),
+                     n = length(unique(id)))  
   
   # names of treated units
   treated_names <- filter(match_df, is_control == "Cyclone-affected") %>%
@@ -733,16 +741,15 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .0085,
   
   # balance plots if desired
   if(plot_bal == TRUE){
-    balance_plot(match_out, lag_num, file_prefix, years, year_ind)
-    climts_plot(match_out, lag_num, file_prefix, years, year_ind)
+    balance_plot(match_out, cyclone_step, file_prefix, years, year_ind)
+    climts_plot(match_out, cyclone_step, file_prefix, years, year_ind)
   }
   
-  # map plot if desire
+  # map plot if desired
   if(plot_map == TRUE){
     matchmap_plot(map, big_map, file_prefix, match_out,
-                  cases_2023 = cases_2023, coastal_dist = coastal_dist)
+                  cases_2023 = cases_2023, buffer_zone=buffer_ids, coastal_dist = coastal_dist)
   }
-  
   
   return(match_out)
 }
@@ -753,6 +760,7 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .0085,
 #
 # Inputs: case_df: a dataframe of case reports by week, year, and unit id
 #         match_out: output of the match_fun function
+#         pop_df: a dataframe of population sizes by id and year
 #         file_prefix: prefix to save pdf image (if spatt_plot or att_plot is true)
 #         att_plot: TRUE/FALSE, whether to attributable cases over time 
 #         spatt_plot: TRUE/FALSE, whether to plot map of attributable cases by unit
@@ -760,10 +768,14 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .0085,
 #         big_map: shapefile of spatial units at higher administrative division to indicate borders (if spatt_plot is true)
 #         lf_num: specify the number of latent factors to use (bypasses cross-validation for optimal latent factor number)
 #         r.max: the maximum number of latent factors to test out in cross-validation for number of latent factors
-#         inc: TRUE/FALSE, whether to conduct analysis on incidence instead of absolute cases. Use at own risk, other functions not adapted for this output.
+#         use_clim: TRUE/FALSE, whether to include climate covariates in the synthetic control model
+#         use_r0: TRUE/FALSE, whether to use temperature-dependent R0 instead of mean temperature in synthetic control model
+#         inc: TRUE/FALSE, whether to conduct analysis on incidence instead of absolute cases. Set to false at own risk, other functions not adapted for this output.
 #         start_year: earliest year to include in analysis
+#         exclude_year: vector of years to be excluded from analysis
 #         end_week: last week in 2023 to include in analysis
-#         log_cases: TRUE/FALSE, whether to conduct analysis on logged cases. Use at own risk, other functions not adapted for this output.
+#         log_cases: TRUE/FALSE, whether to conduct analysis on logged cases. Use at own risk, other functions not adapted for this output. 
+#                     log-scaling not recommended for fect, see 
 #         method: specifies type of inference to conduct in fect package. default to ife (resampling to bootstrap CI). could use gsynth (conformal prediction interval).
 
 # Output: pdf figures in the figs folder if requested and a list with the following entries
@@ -771,12 +783,17 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .0085,
 #         att_nums: summary of attributable cases (from  function)
 #         years: the years over which climate data is provided 
 #         year_ind: the indices for when a new year starts 
-synth_fun <- function(case_df, match_out, file_prefix, 
+#         cyclone_step: index when cyclone occurred 
+#         pop: full population size of the cyclone-affected districts 
+#         pop.weights: population weights for the cyclone-affected districts (in the order of gsynth_out$tr)
+synth_fun <- function(case_df, match_out, pop_df, file_prefix, 
                       att_plot = FALSE,
                       spatt_plot = FALSE, map = NULL,
                       big_map = NULL, 
-                      lf_num=NA, r.max=5, use_clim=FALSE,
-                      inc=FALSE, start_year = 2010,
+                      lf_num=NA, r.max=5, use_clim=TRUE,
+                      use_r0 = FALSE,
+                      inc=TRUE, start_year = 2010,
+                      exclude_year = c(),
                       end_week = 52, log_cases=FALSE,
                       method="ife") {
   
@@ -800,13 +817,14 @@ synth_fun <- function(case_df, match_out, file_prefix,
       mutate(year = ifelse(week == 1 & month == 12, year+1, year)) %>%
       group_by(week, year, id) %>%
       dplyr::summarize(mean_temp = mean(temp),
-                mean_rain = mean(rain),
-                mean_rel_r0 = mean(rel_r0)) %>%
+                       mean_rain = mean(rain),
+                       mean_rel_r0 = mean(rel_r0)) %>%
       left_join(case_df) %>%
       filter(!is.na(mean_temp)) %>%
       filter(id %in% incl_units) %>%
       # filter to specified time period
       filter(year >= start_year) %>%
+      filter(! year %in% exclude_year) %>%
       filter(week <= end_week) %>%
       filter(year <= 2023)
   } else{
@@ -821,17 +839,17 @@ synth_fun <- function(case_df, match_out, file_prefix,
       mutate(year = ifelse(week == 1 & month == 12, year+1, year)) %>%
       group_by(week, year, id) %>%
       dplyr::summarize(mean_temp = mean(temp),
-                mean_rain = mean(rain),
-                mean_rel_r0 = mean(rel_r0)) %>%
+                       mean_rain = mean(rain),
+                       mean_rel_r0 = mean(rel_r0)) %>%
       left_join(case_df) %>%
       filter(!is.na(mean_temp)) %>%
-      # don't actually need the climate covariates, can clear them
+      # don't actually need the climate covariates
       mutate(mean_temp = NA,
              mean_rain = NA,
              mean_rel_r0 = NA) %>%
       filter(id %in% incl_units) %>%
-      # filter to specified time period
       filter(year >= start_year) %>%
+      filter(! year %in% exclude_year) %>%
       filter(week <= end_week) %>%
       filter(year <= 2023)
   }
@@ -856,30 +874,34 @@ synth_fun <- function(case_df, match_out, file_prefix,
     right_join(df) %>%
     group_by(id, step) %>%
     dplyr::summarize(cases = sum(cases),
-              inc = sum(inc),
-              mean_temp = mean(mean_temp),
-              mean_rel_r0 = mean(mean_rel_r0),
-              mean_rain = mean(mean_rain)*1000,
-              pop = mean(pop)) 
+                     mean_temp = mean(mean_temp),
+                     mean_rel_r0 = mean(mean_rel_r0),
+                     mean_rain = mean(mean_rain)*1000,
+                     year = max(year)) 
   
   # when did the cyclone happen?  
-  cyclone_step <- mean(time_df$step[time_df$week == 10 & time_df$year==2023])
+  cyclone_step <- unique(time_df$step[time_df$week == 10 & time_df$year==2023])
   
   # input a zero in weeks with missing data
-  df <- expand.grid(step=1:max(df$step), id=incl_units) %>%
+  df <- expand.grid(step=1:max(df$step, na.rm=TRUE), id=incl_units) %>%
     left_join(df) %>%
+    left_join(pop_df) %>%
+    mutate(inc = cases/pop) %>%
     mutate(cases = ifelse(is.na(cases), 0, cases),
-           inc = ifelse(is.na(inc), 0, inc)) %>%
-    mutate(int = ifelse(id %in% match_out$treated_names & step >= cyclone_step, 1, 0)) %>% # specify post-treatment period
-    mutate(log_cases = log(cases+1)) %>% # calculate logged cases
+           inc = ifelse(is.na(inc) | is.infinite(inc), 0, inc)) %>%
+    mutate(int = ifelse(id %in% match_out$treated_names & step >= cyclone_step, 1, 0),
+           weight = 1) %>%
     left_join(., match_out$df %>% select(id, is_control) %>% distinct() %>% filter(is_control %in% c("Cyclone-affected", "Matched Control"))) 
+  
+  tr_pop <- df %>% filter(int==1 & year==2023) %>% select(pop, id) %>% distinct() %>% filter(!is.na(pop)) %>% select(pop) %>% sum()
   
   #  if specified, use incidence or logged cases as outcome
   if(inc == TRUE){
-    df %<>% mutate(y = inc)
+    df %<>% mutate(y = inc,
+                   weight = pop) 
   }
   else if(log_cases == TRUE){
-    df %<>% mutate(y = log_cases)
+    df %<>% mutate(y = log(cases+exp(-1)))
   }
   else{
     df %<>% mutate(y = cases)
@@ -901,17 +923,33 @@ synth_fun <- function(case_df, match_out, file_prefix,
   
   # running the fect package to get the synthetic control results
   if(use_clim == TRUE){
-    gsynth_out <- df %>%
-      fect(y ~ int + mean_rel_r0 + mean_rain, data = ., 
-           index=c("id", "step"), 
-           force = "two-way", 
-           method=method,
-           se = TRUE, 
-           CV = CV, r = r,
-           seed = 514,
-           nboots = 1000,
-           group="group")
+    if(use_r0 == TRUE){
+      gsynth_out <- df %>%
+        fect(y ~ int + mean_rel_r0 + mean_rain, data = ., 
+             index=c("id", "step"), 
+             force = "two-way", 
+             method=method,
+             se = TRUE, 
+             CV = CV, r = r,
+             seed = 514,
+             nboots = 1000,
+             group="group",
+             W="weight")
   # model without climate covariates
+    } else {
+      gsynth_out <- df %>%
+        fect(y ~ int + mean_temp + mean_rain, data = ., 
+             index=c("id", "step"), 
+             force = "two-way", 
+             method=method,
+             se = TRUE, 
+             CV = CV, r = r,
+             seed = 514,
+             nboots = 1000,
+             group="group",
+             W="weight")
+    }
+    
   } else {
     gsynth_out <- df %>%
       fect(y ~ int, data = ., 
@@ -922,14 +960,33 @@ synth_fun <- function(case_df, match_out, file_prefix,
            CV = CV, r = r,
            seed = 514,
            nboots=1000,
-           group="group")
+           group="group",
+           W="weight")
+  }
+  
+  # get population weights for bootstraps
+  if(inc == TRUE){
+    # which treated locations are included in each bootstrap?
+    boot.locs <- lapply(gsynth_out$boot.ids, function(n) gsynth_out$id[n[1:length(gsynth_out$tr)]])
+    # what are their population sizes
+    boot.pops <- lapply(boot.locs, function(boot) unlist(sapply(boot, function(loc) pop_df$pop[which(pop_df$id == loc & pop_df$year == 2023)])))
+    # population weights for each bootstrap
+    boot.weights <- lapply(boot.pops, function(each.pop) each.pop/sum(each.pop))
+    
+    act.locs <- gsynth_out$id[gsynth_out$tr]
+    act.pops <- sapply(act.locs, function(loc) pop_df$pop[which(pop_df$id == loc & pop_df$year == 2023)])
+    act.weights <- unlist(act.pops)/tr_pop
+  }
+  
+  else{
+    boot.weights <- lapply(1:length(gsynth_out$boot.ids), function(n) rep(1, length.out = length(gsynth_out$tr)))
   }
   
   # calculate percent attributable cases based on bootstraps
-  lapply(gsynth_out$Y.boot, function(x) rowSums(x[,1:length(gsynth_out$tr)])) %>%
+  lapply(1:length(gsynth_out$Y.boot), function(n) apply(gsynth_out$Y.boot[[n]][,1:length(gsynth_out$tr)], 1, function(x) sum(x*boot.weights[[n]]))) %>%
     do.call(cbind, .) %>%
-    `/`(gsynth_out$att.boot * length(gsynth_out$tr), .) %>%
-    ifelse(is.infinite(.), 0, .) %>% # set proportion to zero if there are no reported cases
+    `/`(gsynth_out$att.W.boot, .) %>% ## check this
+    ifelse(is.infinite(.), 0, .) %>% # set proportion to zero when no reported cases
     apply(1, function(x) c(quantile(x, c(.025, .975)), sd(x)/sqrt(length(x)), sum(x<=0)/length(x))) %>% # recalculate 95% CI, standard error, p-value
     t() %>%
     data.frame() %>%
@@ -938,33 +995,42 @@ synth_fun <- function(case_df, match_out, file_prefix,
            recalc.SE = 3,
            recalc.p = 4
     ) %>%
-    cbind(obs = gsynth_out$Y.dat[,gsynth_out$tr] %>% rowSums()) %>%
-    mutate(lower.num = lower.pct*obs, #use reported cases and percent attributable to calculate number attributable
-           upper.num=upper.pct*obs) %>%
-    cbind(gsynth_out$est.att) %>%
-    mutate(mid.pct = (ATT*count)/obs,
-           mid.num=ATT*count) -> gsynth_out$est.att
+    cbind(obs.inc = apply(gsynth_out$Y.dat[,gsynth_out$tr], 1, function(x) sum(x * act.weights))) %>%
+    mutate(obs.cases = obs.inc*tr_pop) %>%
+    mutate(lower.num = lower.pct*obs.inc,  #use reported cases and percent attributable to calculate number attributable
+           upper.num=upper.pct*obs.inc) %>%
+    cbind(gsynth_out$est.att.W) %>%
+    mutate(mid.pct = ATT/obs.inc,
+           mid.num=ATT,
+           mid.cases=ATT*tr_pop,
+           upper.cases=upper.num*tr_pop,
+           lower.cases=lower.num*tr_pop) -> gsynth_out$est.att
+  
+  # calculate rsq
+  gsynth_out$rsq <- cor(c(gsynth_out$Y.dat[1:length(gsynth_out$pre.periods),gsynth_out$tr]), 
+                        c(gsynth_out$Y.ct[1:length(gsynth_out$pre.periods),gsynth_out$tr]))^2
   
   # generate plots if requested
   if(att_plot==TRUE){
-    att_plot(gsynth_out, cyclone_step, file_prefix,
+    att_plot(df, gsynth_out, cyclone_step, tr_pop, act.weights, file_prefix,
              year_ind, unique(time_df$year), inc = inc)
   }
   
   if(spatt_plot==TRUE){
-    spatt_plot(case_df, gsynth_out,  
-               map = map, big_map = big_map, file_prefix=file_prefix,
-               inc=inc)
+    spatt_plot(gsynth_out,  
+               map = map, big_map = big_map, 
+               file_prefix=file_prefix)
   }
   
   # get attributable numbers
-  att_nums <- att_print(gsynth_out, cyclone_step)
+  att_nums <- att_print(gsynth_out, df, cyclone_step,
+                        boot.weights, tr_pop)
   
   return(list("gsynth_obj"=gsynth_out,
               "att_nums"=att_nums,
               "year_ind"=year_ind,
-              "years"=years))
-  
+              "years"=years,
+              "cyclone_step"=cyclone_step,
+              "pop"=tr_pop, 
+              "pop.weights"=act.weights))
 }
-
-
