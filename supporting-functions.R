@@ -32,8 +32,7 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
     do.call(rbind, .) %>%
     group_by(treated_id, step) %>%
     dplyr::summarize(rain_diff = mean(rain_diff),
-              temp_diff = mean(temp_diff)) 
-  
+                     temp_diff = mean(temp_diff)) 
   # calculate the differences after matching
   diff_df <-  lapply(1:length(match_out$treated_names), function(n)
     filter(baldf, place %in% match_out$match_list[[n]]) %>%
@@ -49,12 +48,10 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
     do.call(rbind, .) %>%
     group_by(treated_id, step) %>%
     dplyr::summarize(rain_diff = mean(rain_diff),
-              temp_diff = mean(temp_diff)) 
-  
+                     temp_diff = mean(temp_diff)) 
   
   
   # plots: each line is the mean standardized difference between a district and its matched controls
-
   # rain, pre-matching
   bal1 <- ggplot(prediff_df) +
     geom_line(aes(x=step, y=rain_diff/sd(baldf$mean_rain), group=treated_id), alpha=.1)+
@@ -107,35 +104,7 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
             hjust=-.1, label_size= 12, vjust=1)
   
   ggsave(paste0("figs/", file_prefix, "clim-stddiff.pdf"), height=8, width=8, units="in")
-  
-  # plot: avg standardized difference for each location before and after matching
-  avg_diff_df <- prediff_df %>%
-                  rename(pre_rain_diff = rain_diff,
-                         pre_temp_diff = temp_diff) %>%
-                  left_join(diff_df) %>%
-                  group_by(treated_id) %>%
-                  summarize(avg_rain_diff = mean(abs(rain_diff))/sd(baldf$mean_rain),
-                            avg_temp_diff = mean(abs(temp_diff))/sd(baldf$mean_temp),
-                            avg_pre_rain_diff = mean(abs(pre_rain_diff))/sd(baldf$mean_rain),
-                            avg_pre_temp_diff = mean(abs(pre_temp_diff))/sd(baldf$mean_temp))
-  
-  
- plot_grid(ggplot(avg_diff_df)+
-    geom_point(aes(x=avg_pre_rain_diff, y=avg_rain_diff))+
-    geom_abline(a=0, b=1, linetype="dashed", color="red")+
-    theme_classic()+
-    xlim(c(0,1.75))+
-    ylim(c(0,1.75)),
-  ggplot(avg_diff_df)+
-    geom_point(aes(x=avg_pre_temp_diff, y=avg_temp_diff))+
-    geom_abline(a=0, b=1, linetype="dashed", color="red")+
-    theme_classic()+
-    xlim(c(0,1.75))+
-    ylim(c(0,1.75)))
-  
-
 }
-
 
 #### CLIMATE TIME SERIES PLOT ####
 
@@ -167,58 +136,59 @@ climts_plot <- function(match_out, cyclone_step, file_prefix,
                      Precipitation = weighted.mean(mean_rain, weight),
                      Rel_R0 = weighted.mean(mean_rel_r0, weight),
     ) 
-  
+
     # plot temperature, precipitation, and relative r0
-    temp_plot <-  clim_ts %>% 
+  temp_plot <-  clim_ts %>% 
       ggplot() + 
       # highlight four-week period containing the cyclone
-      geom_rect(xmin = cyclone_step, xmax  = cyclone_step + 1, ymin=-Inf, ymax=Inf, alpha=.5, fill="grey50", color="grey50")+
+      geom_rect(xmin = cyclone_step, xmax  = cyclone_step + 1, ymin=-Inf, ymax=Inf, alpha=.5, fill="grey70", color="grey70")+
       geom_line(aes(x=step, y=Temperature, group=is_control, color=is_control), alpha=.8)+
       scale_color_manual("",
                          breaks = c("Cyclone-affected", "Matched Control", "Cyclone-unaffected", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
                          values = c("#581845", "#6FC0DB", "#FFC300", "grey90", "grey50", "maroon"))+
       theme_classic()+
       xlab("Year")+
-      scale_x_continuous(breaks=year_ind, #make x-axis years
+      scale_x_continuous(breaks=year_ind, # make x-axis years
                          labels=years)+
       ylab("Temperature (C)") +
       theme(legend.position="bottom", 
             axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  
     
-    
-    rain_plot <-  clim_ts %>% 
-      ggplot() + 
-      geom_rect(xmin = cyclone_step, xmax  = cyclone_step + 1, ymin=-Inf, ymax=Inf, alpha=.5, fill="grey50", color="grey50")+
-      geom_line(aes(x=step, y=Precipitation, group=is_control, color=is_control), alpha=.8)+
-      scale_color_manual("",
-                         breaks = c("Cyclone-affected", "Matched Control", "Cyclone-unaffected", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
-                         values = c("#581845", "#6FC0DB", "#FFC300", "grey90", "grey50", "maroon"))+
-      theme_classic()+
-      xlab("Year")+
-      scale_x_continuous(breaks=year_ind, #make x-axis years
-                         labels=years)+
-      ylab("Precipitation (mm/day)") +
-      theme(legend.position="none", 
-            axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-    
-    r0_plot <-  clim_ts %>%
-      ggplot() + 
-      geom_rect(xmin = cyclone_step, xmax  = cyclone_step + 1, ymin=-Inf, ymax=Inf, alpha=.5, fill="grey50", color="grey50")+
-      geom_line(aes(x=step, y=Rel_R0, group=is_control, color=is_control), alpha=.8)+
-      scale_color_manual("",
-                         breaks = c("Cyclone-affected", "Matched Control", "Cyclone-unaffected", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
-                         values = c("#581845", "#6FC0DB", "#FFC300", "grey90", "grey50", "maroon"))+
-      theme_classic()+
-      xlab("Year")+
-      scale_x_continuous(breaks=year_ind, #make x-axis years
-                         labels=years)+
-      ylab("Relative R0")+
-      theme(legend.position="none", 
-            axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-    
+  rain_plot <-  clim_ts %>% 
+    ggplot() + 
+    geom_rect(xmin = cyclone_step, xmax  = cyclone_step + 1, ymin=-Inf, ymax=Inf, alpha=.5, fill="grey70", color="grey70")+
+    geom_line(aes(x=step, y=Precipitation, group=is_control, color=is_control), alpha=.8)+
+    scale_color_manual("",
+                       breaks = c("Cyclone-affected", "Matched Control", "Cyclone-unaffected", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
+                       values = c("#581845", "#6FC0DB", "#FFC300", "grey90", "grey50", "maroon"))+
+    theme_classic()+
+    xlab("Year")+
+    scale_x_continuous(breaks=year_ind,
+                       labels=years)+
+    ylab("Precipitation (mm/day)") +
+    theme(legend.position="none", 
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  
+  # temperature-dependent R0 plot
+  r0_plot <-  clim_ts %>%
+    ggplot() + 
+    geom_rect(xmin = cyclone_step, xmax  = cyclone_step + 1, ymin=-Inf, ymax=Inf, alpha=.5, fill="grey70", color="grey70")+
+    geom_line(aes(x=step, y=Rel_R0, group=is_control, color=is_control), alpha=.8)+
+    scale_color_manual("",
+                       breaks = c("Cyclone-affected", "Matched Control", "Cyclone-unaffected", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
+                       values = c("#581845", "#6FC0DB", "#FFC300", "grey90", "grey50", "maroon"))+
+    theme_classic()+
+    xlab("Year")+
+    scale_x_continuous(breaks=year_ind,
+                       labels=years)+
+    ylab("Relative R0")+
+    theme(legend.position="none", 
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  
     # plot a grid of whichever climate variables were requested
     plots<-list()
-    
+  
     leg <- get_legend(temp_plot)
     temp_plot <- temp_plot+theme(legend.position="none")
     
@@ -235,6 +205,7 @@ climts_plot <- function(match_out, cyclone_step, file_prefix,
       plots[[length(plots)+1]] <- r0_plot
     }
     
+    # set dimensions based on however many subplots were generated
     if(length(plots)==1){
       p <- plot_grid(plots[[1]]) %>%
         plot_grid(., leg, nrow=2, rel_heights=c(9, 1))
@@ -275,7 +246,7 @@ matchmap_plot <- function(map, big_map, file_prefix, match_out,
                           buffer_zone = c(), cases_2023 = c(), coastal_dist = c()){
   
   # since id columns are different for adm3 and adm1 analysis, rename them
-  map %<>% rename(any_of(c(id = "ubigeo", id = "ADM1_PCODE")))
+  map %<>% rename(any_of(rename_list))
   
   match_df <- match_out$df
   
