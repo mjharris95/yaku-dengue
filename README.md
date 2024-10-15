@@ -34,7 +34,7 @@ clim-df.csv: climate every day from 2016- 2023, used for matching and the synthe
 
 ## Scripts
 
-analysis.R: script to conduct all analyses in main text and supplement
+analysis.R: script to conduct all analyses in main text and supplement except for climate attribution
 
 data-prep.R: pieces together climate, case, and population data. Cannot be run in full because disaggregated climate files are not provided.
 
