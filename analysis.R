@@ -284,7 +284,7 @@ lapply(match_out_allper$treated_names, function(x)
 
 
 
-#### RUN SUPPLEMENTAL ANALYSES ####
+#### RUN SUPPLEMENTAL SYNTHETIC CONTROL ANALYSES ####
 ### Run for just coastal
 match_out_coast <- match_fun(anomaly_upper = .0085, anomaly_lower = .007,
                              coastal_dist = coastal_dist, cases_2023 = cases_2023,
@@ -294,19 +294,20 @@ match_out_coast <- match_fun(anomaly_upper = .0085, anomaly_lower = .007,
                              map=per_map, big_map=dept_map)
 
 synth_out_coast <- synth_fun(case_df, match_out_coast, pop_df, "adm3-coast",  
-                             att_plot=TRUE, spatt_plot=FALSE, map=per_map, use_clim=TRUE, use_r0=FALSE,
+                             att_plot=TRUE, spatt_plot=FALSE, map=per_map, 
+                             big_map = dept_map, use_clim=TRUE, use_r0=FALSE,
                              start_year = 2016, inc=TRUE)
 
 
 ### Without climate covariates 
 synth_out_allper_noclim <- synth_fun(case_df, match_out_allper, pop_df, "adm3-allper-noclim", 
                                      use_clim=FALSE,
-                                     att_plot=TRUE, spatt_plot=FALSE, map=per_map,
+                                     att_plot=TRUE, spatt_plot=FALSE, 
                                      start_year = 2016, inc=TRUE)
 
 synth_out_coast_noclim <- synth_fun(case_df, match_out_coast, pop_df, "adm3-coast-noclim", 
                                     use_clim=FALSE,
-                                    att_plot=FALSE, spatt_plot=FALSE, map=per_map,
+                                    att_plot=FALSE, spatt_plot=FALSE,
                                     inc=TRUE,
                                     start_year = 2016)
 
@@ -401,7 +402,8 @@ synth_out_allper_pre16 <- synth_fun(case_df, match_out_allper, pop_df, "adm3-all
 # Test effects of excluding heights of COVID-19 pandemic (2020 - 2021)
 synth_out_allper_nocovid <- synth_fun(case_df, match_out_allper, pop_df, "adm3-nocovid", 
                                       att_plot=FALSE, spatt_plot=FALSE, 
-                                      map=per_map, big_map=dept_map, use_clim=TRUE, use_r0=FALSE,
+                                      use_clim=TRUE, 
+                                      use_r0=FALSE,
                                       exclude_year = c(2020, 2021), inc=TRUE)
 
 # manually plot so that the excluded years are properly accounted for 
@@ -451,6 +453,7 @@ for(anomaly_upper in c(.007, .0085, .01)){
       my_synth <- synth_fun(case_df, 
                             my_match, 
                             pop_df, 
+                            NA,
                             use_clim=TRUE,
                             use_r0=FALSE,
                             inc=TRUE,
@@ -587,7 +590,8 @@ for(i in 1:3){
                         file_prefix= NA,
                         match_num=match_num)
   
-  synth_mn <- synth_fun(case_df, match_mn, pop_df, NA, use_clim=TRUE, use_r0=FALSE,
+  synth_mn <- synth_fun(case_df, match_mn, pop_df, NA, 
+                        use_clim=TRUE, use_r0=FALSE,
                         start_year = 2016, inc=TRUE)
   
   # store values
@@ -616,7 +620,8 @@ for(i in 1:3){
       unlist()
     
     # conduct synthetic control analysis 
-    synth_mn <- synth_fun(case_df, match_mn, pop_df, NA, use_clim=TRUE, use_r0=FALSE,
+    synth_mn <- synth_fun(case_df, match_mn, pop_df, NA, 
+                          use_clim=TRUE, use_r0=FALSE,
                           start_year = 2016, inc=TRUE)
     # store values
     mnvar_att[[i]] <- synth_mn$gsynth_out$est.att
@@ -728,9 +733,11 @@ synth_lf_df <- data.frame()
 
 for(lf_num in 0:5){
   # loop through number of latent factors (lf_num), using set of treated/control districts for main model
-  this_synth <- synth_fun(case_df, match_out_allper, pop_df, use_clim=TRUE, 
-                          use_r0=FALSE, "adm3-lfvar", 
-                          lf_num=lf_num, start_year = 2016, inc=TRUE)
+  this_synth <- synth_fun(case_df, match_out_allper, pop_df, "adm3-lfvar",
+                          use_clim=TRUE, 
+                          use_r0=FALSE, 
+                          lf_num=lf_num, start_year = 2016, 
+                          inc=TRUE)
   
   # store outputs
   synth_lf[[lf_num+1]] <- this_synth
@@ -844,6 +851,261 @@ pop_df_adm1 <- expand_grid(id=c(match_out_adm1$match_names, match_out_adm1$treat
                            year = 2018:2023)  %>% 
   left_join(., (case_df_adm1 %>% select(id, pop) %>% distinct()))
 
-synth_out_adm1 <- synth_fun(case_df_adm1, match_out_adm1, pop_df_adm1, "adm1",  
-                            att_plot=TRUE, spatt_plot=FALSE, map=five_map, use_clim=TRUE, use_r0=FALSE,
-                            start_year = 2018, end_week=28, inc=TRUE, method="ife")# smaller number of treated districts, use gsynth method for inference
+synth_out_adm1 <- synth_fun(case_df_adm1, match_out_adm1, 
+                            pop_df_adm1, "adm1",  
+                            att_plot=TRUE, spatt_plot=FALSE,
+                            use_clim=TRUE, use_r0=FALSE,
+                            start_year = 2018, end_week=28, inc=TRUE)
+
+
+#### ANALYSIS FOR PART 2: SOCIOVULNERABILITY INDICES BEGINS HERE
+# would recommend detaching other packages due to interference between dplyr and terra select
+library(raster)
+library(terra)
+library(psych)
+
+# read in shapefile of districts
+per_map<-read_sf("maps/CDC_Distritos.shp") %>%
+  rename(id = ubigeo)
+
+# the cov directory contains .tif files of different vulnerability indices - excluded from
+# public respository for privacy reasons
+files <- dir("cov")
+
+#exclude population density
+files <- files[!startsWith(files, "r_dpob")]
+
+# loop through covariate files
+for(file in files[startsWith(files, "r_")]){
+  
+  # identify the department based on file name
+  dept <-  file %>% 
+    str_split(., pattern=".tif") %>% 
+    unlist() %>% 
+    head(1) %>%
+    str_split(., pattern="_") %>%
+    unlist() %>%
+    tail(1) 
+  
+  # issue with string splitting because LA LIBERTAD is two words
+  dept <- ifelse(dept == "LIBERTAD", "LA LIBERTAD", dept)
+  dept <- ifelse(dept == "MARTIN", "SAN MARTIN", dept)
+  
+  # read in corresponding population density file
+  dpob <-  switch(dept,
+                  "TUMBES" = "r_dpob_TUMBES_050.tif",
+                  "LA LIBERTAD" = "r_dpob_LA_LIBERTAD_050.tif",
+                  "LAMBAYEQUE" = "r_dpob_LAMBAYEQUE_050.tif",
+                  "PIURA" = "r_dpob_PIURA_050.tif",
+                  "CAJAMARCA" = "r_dpob_CAJAMARCA_050.tif",
+                  "SAN MARTIN" = "r_dpob_SAN_MARTIN_050.tif" ) %>%
+    paste0("cov/", .) %>%
+    rast()
+  
+  
+  # what is the variable name?
+  var_name <- file %>% 
+    str_split(., "r_") %>%
+    unlist() %>%
+    tail(-1) %>%
+    paste("collapse" = "r_") %>%
+    str_split(., "_[:upper:]")  %>%
+    unlist() %>%
+    head(1) 
+  
+  # read in the covariate raster
+  socio <- rast(paste0("cov/" , file))
+  
+  # align the rasters
+  dpob <- project(dpob, per_map)
+  socio <- project(socio, dpob)
+  dpob <- crop(dpob, socio)
+  
+  # weight covariates based on population
+  socio_mult <- socio * dpob
+  
+  # get population-weighted sum
+  socio_sum <- terra::extract(socio_mult, per_map,
+                              fun="sum", na.rm=TRUE,
+                              bind = TRUE) %>%
+    st_drop_geometry() %>%
+    data.frame() %>%
+    rename(var = 5)
+  
+  # get population and calculate pop-weighted mean
+  covar_df <- terra::extract(dpob, per_map,
+                             fun="sum", na.rm=TRUE,
+                             bind = TRUE) %>% 
+    st_drop_geometry %>%
+    data.frame() %>%
+    rename(pop = 5) %>%
+    left_join(socio_sum) %>%
+    mutate(avg_socio = var/pop) %>%
+    mutate(var_name = var_name) %>%
+    filter(DEPARTAMEN == dept) %>%
+    rbind(covar_df)
+  
+  
+  # this loop takes a while to run, save each step
+  save(covar_df, file="covar_df.RData")
+}
+
+
+load("covar_df.RData")
+
+# load in the matching and gsynth results
+load("peru-main.RData")
+
+# filter covariates to the cyclone-affected districts
+covar_df %<>%
+  filter(id %in% match_out_allper$treated_names)
+
+set.seed(0514)
+
+# pivot wider - format for pca package
+covar_df %<>%
+  distinct() %>%
+  dplyr::select(c(id, avg_socio, var_name)) %>%
+  pivot_wider(names_from=var_name, values_from=avg_socio) %>%
+  distinct()
+
+# append weather information during Cyclone Yaku
+covar_df <- read.csv("anomaly_df.csv") %>%
+  dplyr::select(id, temp, rain) %>%
+  right_join(covar_df) %>%
+  filter(!is.nan(vui))
+
+# determine number of factors to use based on vss
+covar_df %>% 
+  dplyr::select(-c(id, socio_vtp)) %>%
+  vss(n=8, rotate="varimax", fm="mle")
+
+# run pca, store results
+covar_df %>% 
+  dplyr::select(-c(id, socio_vtp)) %>%
+  principal(nfactors=4, rotate="varimax", scores=TRUE) -> pca_res
+
+# extract labels for main variables in each rotated components,
+# use this to understand rotated components & helper for plotting
+RC_labs <- pca_res$loadings %>% 
+  unclass %>% 
+  as.data.frame %>% 
+  rownames_to_column() %>% 
+  pivot_longer(starts_with("RC")) %>% 
+  filter(abs(value) > 0.7) %>% 
+  # make this into the correct variable names
+  mutate(lab = recode(rowname, 
+                      "rain" = "Precipitation", 
+                      "vui" = "Flood susceptibility",
+                      "socio_vpr" = "Low-quality walls",
+                      "socio_vtc" = "Low-quality roofs",
+                      "temp" = "Temperature",
+                      "socio_vps" = "Low-quality floors",
+                      "socio_vtp" = "Low-quality housing",
+                      "socio_acc" = "Nonpublic \nwater source")) %>%
+  mutate(lab = paste0( #ifelse(value < 0, "- ", "+ "), 
+    lab, " (",  round(value, 2), ")")) %>% 
+  group_by(name) %>% 
+  arrange(name, desc(abs(value))) %>% 
+  summarise(lab = paste(lab, collapse = "\n")) %>% 
+  mutate(xval = as.numeric(gsub("RC", "", name)))
+
+
+# add RC values to dataframe
+pca_res$scores %>%
+  data.frame() %>%
+  cbind(covar_df, .) -> covar_df
+
+# extract cyclone-attributable incidence in each district across the post-cyclone period (April 22 - Nov 3)
+eff_ind <- which(rownames(synth_out_allper$gsynth_obj$est.att) %in% c("3", "4", "5", "6", "7", "8", "9"))
+
+sapply(covar_df$id, function(dist_id) synth_out_allper$gsynth_obj$eff[eff_ind, which(synth_out_allper$gsynth_obj$id==dist_id)] %>% sum()) %>%
+  data.frame(ATT = .,
+             id = names(.)) %>%
+  right_join(covar_df) -> covar_df
+
+# fit regression 
+mod.res <- lm(ATT~RC1+RC2+RC3+RC4, data=covar_df)
+mod <- mod.res$coefficients
+
+# get the bootstrapped attributable incidence estimates from the generalized synthetic control
+boot_vals <- lapply(covar_df$id, function(id)
+  synth_out_allper$gsynth_obj$est.group.output[[id]]$att.on.boot[eff_ind,] %>%
+    colSums() %>%
+    data.frame("id" = id,
+               "ATT" = .,
+               "boot" = 1:1000)) %>%
+  do.call(rbind, .) %>%
+  filter(!is.na(ATT)) 
+
+# because of how the bootstrapping works, some of the districts were randomly resampled more than others
+# we randomly sample the same number of bootstrapped effect estimates for each district to ensure
+# our regression isn't biased toward a particular district
+boot_sample <-  boot_vals %>%
+  group_by(id) %>%
+  slice_sample(n=609) %>%
+  ungroup()
+
+# for each bootstrap, refit the model and store the coefficients 
+# here, we're resampling across both cyclone-affected districts and their bootstrapped estimates
+suppressWarnings(boot_mod <- lapply(1:1000, function(i) slice_sample(boot_sample, n=55, replace=TRUE) %>%
+                                      left_join(., covar_df %>% dplyr::select(-ATT), by="id") %>%
+                                      lm(ATT~RC1+RC2+RC3+RC4, data=.)  %>% 
+                                      summary() %>% 
+                                      coef() %>% 
+                                      data.frame() %>%
+                                      dplyr::select(Estimate) %>%
+                                      t() %>%
+                                      data.frame()) %>%
+                   do.call(rbind, .) %>%
+                   #determine the 95% confidence interval and p-value across estimates
+                   sapply(function(x) c(quantile(x, c(.025, .975)), sum(x<=0)/1000)) %>%
+                   t() %>%
+                   data.frame() %>%
+                   rename("lower.CI"=1,
+                          "upper.CI"=2,
+                          "p"=3) %>%
+                   cbind(., var = rownames(.),
+                         mid = mod)) 
+
+# rename y-intercept variable (which confusingly get called x-intercept because of how R default names columns)
+boot_mod$var <-  ifelse(boot_mod$var == "X.Intercept.", "Intercept", boot_mod$var)
+
+RC_labs$y <- c(20, 10, 20, 10)
+
+# plot the relationship between the RCs and cyclone-attributable incidence
+p1 <- boot_mod %>%
+  filter(var!="Intercept") %>%
+  ggplot() + 
+  geom_point(aes(x=var, y=mid*1000), size=4)+
+  geom_errorbar(aes(x=var, ymin=lower.CI*1000, ymax=upper.CI*1000), width=.1)+
+  geom_hline(linetype="dashed", yintercept=0, color="maroon")+
+  geom_label(data = RC_labs, 
+             aes(x = name, label = lab, y = y), size = 2)+
+  theme_classic()+
+  scale_y_continuous(limits=c(-10, 25))+
+  ylab("Cyclone-attributable \ncases per thousand")+
+  xlab("Factor")+
+  theme(text=element_text(size=10))
+
+# plot the temperature vs cyclone-attributable cases
+p2 <- boot_vals %>% 
+  group_by(id) %>%
+  summarize(min.eff = quantile(ATT, .025),
+            max.eff = quantile(ATT, .975)) %>%
+  right_join(covar_df) %>%
+  ggplot() + 
+  geom_linerange(aes(x=temp,ymin=min.eff*1000, ymax=max.eff*1000), 
+                 color="gray", alpha=.6, linewidth=.3)+
+  geom_point(aes(x=temp, y=ATT*1000),
+             size=1, alpha=.6)+
+  theme_classic()+
+  geom_hline(yintercept=0, linetype="dashed", color="maroon") +
+  geom_vline(xintercept=24, linetype="dashed", color="maroon") +
+  xlab("Mean Temperature During Yaku (C)")+
+  ylab("Cyclone-attributable \ncases per thousand")+
+  theme(text=element_text(size=10))
+
+plot_grid(p1, p2, nrow=2, labels="AUTO")
+ggsave(paste0("figs/vul-ind.pdf"), height=11, width=11, units="cm")
+

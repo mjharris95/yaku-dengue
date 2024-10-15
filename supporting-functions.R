@@ -589,7 +589,8 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .007,
                       my_country = "PER3", 
                       match_num = 10, 
                       plot_bal=FALSE, plot_map=FALSE, file_prefix=NA,
-                      map=NULL, big_map=NULL){
+                      map=NULL, big_map=NULL,
+                      treated_names=c()){
   
   # Return error if file prefix/maps are needed but not provided
   if((plot_bal==TRUE | plot_map==TRUE) & is.na(file_prefix)){
