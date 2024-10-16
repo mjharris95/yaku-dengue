@@ -108,6 +108,44 @@ read.csv("AedesR0Out.csv") %>%
 
 ggsave("figs/relr0.pdf", height=4, width=8, units="in")
 
+
+
+# read in peru map
+per_map <- read_sf("maps/CDC_Departamentos.shp")
+
+# Plot percentile anomaly in March
+# read in precipitation
+fread("march-clim_df.csv") %>%
+  # filter to Peru at admin1
+  filter(country=="PER") %>%
+  # get year
+  mutate(year = year(date)) %>%
+  # take March mean
+  group_by(id, year) %>%
+  summarize(mean_rain = mean(rain)) %>%
+  # calculate percentiles
+  group_by(id) %>%
+  mutate(pctile = percent_rank(mean_rain)) %>%
+  filter(year == 2023) %>%
+  mutate(pctile_dis = case_when(
+    pctile > .95 ~ "> 95th",
+    pctile > .90 ~ "> 90th",
+    pctile > .85 ~ "> 85th",
+    pctile <= .85 ~ "Non-extreme (< 85th)"
+  )) %>%
+  rename(DEPARTAMEN = id) %>%
+  # append to Peru map 
+  merge(per_map, .) %>%
+  # plot
+  ggplot() + 
+  geom_sf(aes(fill=pctile_dis))+
+  scale_fill_manual("Percentile",
+                    values=c("white", "#ffa590", "#ff4122", "#c61a09"),
+                    breaks=c("Non-extreme (< 85th)", "> 85th", "> 90th", "> 95th"))+
+  theme_void()
+
+ggsave("figs/pctile-anomaly.pdf", height=4, width=4, units="in")
+
 #### PREPARE INPUT DATA FOR SYNTHETIC CONTROL ANALYSIS ####
 
 # select districts with cases in 2023
