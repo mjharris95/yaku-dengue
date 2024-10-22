@@ -4,15 +4,13 @@
 
 ## Scripts
 
-1_climate_attribution.ipynb: jupyter notebook that runs climate attribution analyses. This script saves figure files to the /1_climate_figures/ directory
+1_climate_attribution.ipynb: jupyter notebook that runs climate attribution analyses. This script saves figure files to the /1_climate_figures/ directory.
 
 ## Folders:
 
 1_climate_input_data: Contains monthly precipitation data from climate models downloaded from the CMIP6 database, accessed via the Earth System Grid Federation website at <https://aims2.llnl.gov/search>. See 1_climate_input_data/README.md for details.
 
 1_climate_figures: directory containing figure files, output by 1_climate_attribution.ipynb script
-
-.ipynb_checkpoints: checkpoints for scripts
 
 # Part 2: Cyclone Yaku and dengue
 
@@ -31,6 +29,10 @@ march-clim_df.csv: climate in March from 1993 - 2023 in each spatial unit
 clim-df.csv: climate every day from 2016- 2023, used for matching and the synthetic control analysis.
 
 The following files are missing from the respository due to data-sharing restrictions from CDC Peru.
+
+codubi.rds: Population estimates for districts in Peru from 2010 - 2023
+
+PER_adm3_cases.rds: weekly cases reported in Peruvian districts (adm3)
 
 ## Scripts
 
