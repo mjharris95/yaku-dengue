@@ -22,19 +22,19 @@ AedesR0Out.csv: converts temperature to a temperature-dependent R0 term (from [M
 
 anomaly_df.csv: March precipitation anomaly during Cyclone Yaku in Peruvian districts (based on Google Earth Engine data)
 
-Note that two additional files are missing from this repository because they were two large to share on Github. In order to successfully run the analysis script, please download the following two files from [here](https://drive.google.com/drive/folders/1vxb1OHQLQaAVJs5YCt1YAhI3o_tCVLxp?usp=sharing):
-
-march-clim_df.csv: climate in March from 1993 - 2023 in each spatial unit
-
-clim-df.csv: climate every day from 2016- 2023, used for matching and the synthetic control analysis.
-
 codubi.rds: Population estimates for districts in Peru from 2010 - 2023
 
 covar_df.RData: population-weighted averages of covariates for the moderation analysis.
 
 PER_adm3_cases.rds: weekly cases reported in Peruvian districts (adm3)
 
-Note that three additional files are missing from this repository because they were too large to share on Github. In order to successfully run the analysis script, please download the following two files from [here](https://drive.google.com/drive/folders/1vxb1OHQLQaAVJs5YCt1YAhI3o_tCVLxp?usp=sharing)
+Note that three additional files are missing from this repository because they were too large to share on Github. In order to successfully run the analysis script, please download the following three files from [here](https://drive.google.com/drive/folders/1vxb1OHQLQaAVJs5YCt1YAhI3o_tCVLxp?usp=sharing)
+
+march-clim_df.csv: climate in March from 1993 - 2023 in each spatial unit
+
+clim-df.csv: climate every day from 2016- 2023, used for matching and the synthetic control analysis.
+
+peru-main.RData: output of the main synthetic control analysis 
 
 ## Scripts
 
