@@ -295,15 +295,17 @@ for(i in 1:5){
                         "id" = synth_out_allper$gsynth_obj$id) %>%
     merge(per_map, .) %>%
     ggplot()+
-    geom_sf(aes(fill=Loading), color="black", lwd=.3)+
-    geom_sf(data=dept_map, fill=NA, color="black", lwd=.6)+
+    geom_sf(aes(fill=Loading), color="black", size=.01)+
+    geom_sf(data=dept_map, fill=NA, color="grey", size=.01)+
     theme_map()+
     ggtitle(paste0("Latent Factor ",i))+
     scale_fill_continuous_diverging(palette = "Purple-Green")
 }
 
-plot_grid(lp[[1]], lp[[2]],
-          lp[[3]], lp[[4]],
+plot_grid(lp[[1]], 
+          lp[[2]],
+          lp[[3]],
+          lp[[4]],
           lp[[5]], nrow=3)
 
 ggsave("figs/fl-maps.pdf", height=8, width=8, units="in")
