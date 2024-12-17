@@ -1,4 +1,4 @@
-# This repository contains data and scripts to run a project estimating the number of additional cases of dengue caused by Cyclone Yaku and attributing extreme precipitation events in northwest Peru to anthropogenic activity. Please view the pre-print (here)[https://www.medrxiv.org/content/10.1101/2024.10.23.24309838v1] for more information about this project.
+# This repository contains data and scripts to run a project estimating the number of additional cases of dengue caused by Cyclone Yaku and attributing extreme precipitation events in northwest Peru to anthropogenic activity. Please view the pre-print [here](https://www.medrxiv.org/content/10.1101/2024.10.23.24309838v1) for more information about this project.
 
 # Part 1: Climate attribution
 
@@ -22,22 +22,17 @@ AedesR0Out.csv: converts temperature to a temperature-dependent R0 term (from [M
 
 anomaly_df.csv: March precipitation anomaly during Cyclone Yaku in Peruvian districts.  ERA5 data extracted using Google Earth Engine.
 
-codubi.rds: Population estimates for districts in Peru from 2010 - 2023. These data were provided by CDC Peru and compiled from the following Peruvian governmental agencies: MTC (Ministerio de Transportes y Comunicaciones, Minister of Transport and Communications); INEI (Instituto Nacional de Estadistica e Informatica, National Institute of Statistcs and Information); CENEPRED (Centro Nacional de Estimaci´on Prevenci´on y Reducci´on del Riesgo de Desastres, The National Center for Estimation, Prevention and Reduction of Disaster Risk). Please see Supplemental Table 5 in the pre-print (here)[https://www.medrxiv.org/content/10.1101/2024.10.23.24309838v1] for more information.
+codubi.rds: Population estimates for districts in Peru from 2010 - 2023. These data were provided by CDC Peru and compiled from the following Peruvian governmental agencies: MTC (Ministerio de Transportes y Comunicaciones, Minister of Transport and Communications); INEI (Instituto Nacional de Estadistica e Informatica, National Institute of Statistcs and Information); CENEPRED (Centro Nacional de Estimaci´on Prevenci´on y Reducci´on del Riesgo de Desastres, The National Center for Estimation, Prevention and Reduction of Disaster Risk). Please see Supplemental Table 5 in the pre-print [here](https://www.medrxiv.org/content/10.1101/2024.10.23.24309838v1) for more information.
 
-<<<<<<< Updated upstream
 covar_df.RData: population-weighted averages of covariates for the moderation analysis.
 
-PER_adm3_cases.rds: weekly cases reported in Peruvian districts (adm3)
-=======
 PER_adm3_cases.rds: weekly cases reported in Peruvian districts (adm3). These data were provided by CDC Peru.
->>>>>>> Stashed changes
 
 Note that three additional files are missing from this repository because they were too large to share on Github. In order to successfully run the analysis script, please download the following three files from [here](https://drive.google.com/drive/folders/1vxb1OHQLQaAVJs5YCt1YAhI3o_tCVLxp?usp=sharing)
 
 march-clim_df.csv: climate in March from 1993 - 2023 in each spatial unit. ERA5 data extracted using Google Earth Engine.
 
 clim-df.csv: climate every day from 2016- 2023, used for matching and the synthetic control analysis.  ERA5 data extracted using Google Earth Engine.
-
 
 peru-main.RData: output of the main synthetic control analysis 
 
