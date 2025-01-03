@@ -295,8 +295,8 @@ for(i in 1:5){
                         "id" = synth_out_allper$gsynth_obj$id) %>%
     merge(per_map, .) %>%
     ggplot()+
-    geom_sf(aes(fill=Loading), color="black", size=.01)+
-    geom_sf(data=dept_map, fill=NA, color="grey", size=.01)+
+    geom_sf(aes(fill=Loading), color="grey40", size=.01)+
+    geom_sf(data=dept_map, fill=NA, color="black", size=.01)+
     theme_map()+
     ggtitle(paste0("Latent Factor ",i))+
     scale_fill_continuous_diverging(palette = "Purple-Green")
