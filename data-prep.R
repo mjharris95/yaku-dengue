@@ -1,7 +1,7 @@
 # process and merge Google Earth Engine files 
 
-# March climate from 1993 - 2023
-files <- dir("/march-files") # assumes all of the March files into a folder called "march-files"
+# March climate from 1973 - 2023
+files <- dir("march-files") # assumes all of the March files into a folder called "march-files"
 
 march_df <- data.frame()
 

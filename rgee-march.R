@@ -1,6 +1,10 @@
+library(reticulate)
+use_condaenv("rgee", conda="auto", required = TRUE)
+
 library(rgee)
 library(tidyverse)
-#ee = import("ee")
+
+ee = import("ee")
 ee_Initialize(user = "malljes13", # saves to my personal Google Earth Engine project, set for different users
               project="ee-dengue-climate")
 
@@ -11,8 +15,8 @@ aedesr0_list <- ee$List(aedes_r0$aegypti.R0.median)
 
 # submit runs for different countries separately.  Set country here to submit a run.
 # options are PER (Peru, admin1), PER3 (Peru, adm3), BRA (Brazil, admin2),
-# ECU1 (Ecuador, admin1), ECU2 (Ecuador, adm2)
-country <- "ECU1"
+# ECU1 (Ecuador, admin1), ECU2 (Ecuador, adm2). Only PER3 and PER are used in manuscript.
+country <- "PER"
 
 shape <- switch(   
   country,   
@@ -29,8 +33,8 @@ adm_lev <- switch(
   "ECU1" = "ADM1_PCODE",
   "ECU2" = "ADM2_PCODE")   
 
-# will extract for march from 1993-2023
-years<-1993:2023
+# will extract for march from 1973-2023
+years<-1973:2023
 
 start_dates <- as.Date(paste0(years, "-03-01"), format = "%Y-%m-%d")
 end_dates <- as.Date(paste0(years, "-04-01"), format = "%Y-%m-%d")

@@ -30,9 +30,9 @@ PER_adm3_cases.rds: weekly cases reported in Peruvian districts (adm3). These da
 
 Note that three additional files are missing from this repository because they were too large to share on Github. In order to successfully run the analysis script, please download the following three files from [here](https://drive.google.com/drive/folders/1vxb1OHQLQaAVJs5YCt1YAhI3o_tCVLxp?usp=sharing)
 
-march-clim_df.csv: climate in March from 1993 - 2023 in each spatial unit. ERA5 data extracted using Google Earth Engine.
+march-clim_df.csv: climate in March from 1973 - 2023 in each spatial unit. ERA5 data extracted using Google Earth Engine.
 
-clim-df.csv: climate every day from 2016- 2023, used for matching and the synthetic control analysis.  ERA5 data extracted using Google Earth Engine.
+clim-df.csv: climate every day from 2016 - 2023, used for matching and the synthetic control analysis.  ERA5 data extracted using Google Earth Engine.
 
 peru-main.RData: output of the main synthetic control analysis 
 
@@ -42,7 +42,7 @@ analysis.R: script to conduct all analyses in main text and supplement except fo
 
 data-prep.R: pieces together climate, case, and population data. Cannot be run in full because disaggregated climate files are not provided.
 
-rgee-march.R: uses Google Earth Engine to extract March climate data from 1993 to 2023 (in order to calculate precipitation anomaly). A Google Earth Engine account and access to some private assets stored by others users are required to run this script.
+rgee-march.R: uses Google Earth Engine to extract March climate data from 1973 to 2023 (in order to calculate precipitation anomaly). A Google Earth Engine account and access to some private assets stored by others users are required to run this script.
 
 rgee-tomatch.R: uses Google Earth Engine to extract climate data for the entire year from 2016 - 2023. Also extracts 2020 population. Used for matching and synthetic control. A Google Earth Engine account and access to some private assets stored by others users are required to run this script.
 

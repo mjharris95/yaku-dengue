@@ -1,4 +1,4 @@
-#devtools::install("C:/Users/mallj/GitHub/yaku-dengue/fect-edit") on first run, use this to install modified fect package
+#install_github("mjharris95/fect") #on first run, use this to install modified fect package
 library(tidyverse)
 library(sf)
 library(lubridate)
@@ -25,7 +25,7 @@ annual_df <- read.csv("march-clim_df.csv") %>%
   mutate(date = as_date(date)) %>%
   mutate(year = year(date),
          day = day(date)) %>%
-  filter(day >= 7 & day <= 20) %>%
+  filter(day >= 7 & day <= 20) %>% # between the 7th and 20th
   group_by(year, id, country) %>%
   summarize(rain = mean(rain),
             temp = mean(temp)) 
@@ -33,9 +33,21 @@ annual_df <- read.csv("march-clim_df.csv") %>%
 # fix ubigeos
 annual_df$id[annual_df$country=="PER3"] <- str_pad(annual_df$id[annual_df$country=="PER3"], 6, pad="0")
 
+
+# select districts with cases in 2023
+case_df<-readRDS("PER_adm3_cases.RDS")
+
+# identify districts with cases reported in 2023
+cases_2023<-case_df %>%
+  filter(year==2023) %>%
+  select(ubigeo) %>%
+  unlist() %>%
+  unique()
+
 # calculate anomaly
-anomaly_df <- annual_df %>% filter(!year %in% c(2017, 2023)) %>% # remove 2017, El Nino Year
+anomaly_df <- annual_df %>% #filter(!year %in% c(2017, 2023)) %>% # remove 2017, El Nino Year
   group_by(id, country) %>%
+  filter(country == "PER3") %>%
   summarize(mean_rain = mean(rain),
             mean_temp = mean(temp)) %>%
   right_join(annual_df) %>%
@@ -45,16 +57,16 @@ anomaly_df <- annual_df %>% filter(!year %in% c(2017, 2023)) %>% # remove 2017, 
 
 write.csv(anomaly_df, "anomaly_df.csv", row.names=FALSE)
 
-# Plot distribution of preciptiation anomalies across districts and regions
-anomaly_df %>% filter(country %in% c("PER3", "PER")) %>%
-  mutate(adm = ifelse(country=="PER3", "A. District", "B. Region")) %>%
+# Plot distribution of preciptiation anomalies across districts
+anomaly_df %>% filter(country %in% c("PER3")) %>%
+ #mutate(adm = ifelse(country=="PER3", "A. District", "B. Region")) %>%
   ggplot()+
   geom_histogram(aes(x=diff_rain*1000))+
   xlab("Precipitation Anomaly")+
-  facet_wrap(~adm, scale="free_y")+
+ #facet_wrap(~adm, scale="free_y")+
   theme_classic()
 
-ggsave("figs/anomaly_dist.pdf", height=4, width=8, units="in")
+ggsave("figs/anomaly_dist.pdf", height=4, width=4, units="in")
 
 # make maps of baseline climate conditions
 map3 <- read_sf("maps/CDC_Distritos.shp") %>%
@@ -62,13 +74,13 @@ map3 <- read_sf("maps/CDC_Distritos.shp") %>%
   merge(anomaly_df %>% filter(country=="PER3"))
 
 map3 %>%  filter(country=="PER3") %>%
-  filter(diff_rain > .0085) %>%
-  summarise(id = "extreme") -> extreme_map3 # treated districts most heavily impacted by cyclone
+  filter(diff_rain > .0085 & id %in% cases_2023) %>%
+  summarise(id = "extreme") -> extreme_map3 # treated districts most heavily impacted by extreme precip
 
 # merge data and plot for adm1
 p2a <- ggplot() + 
   geom_sf(data=map3, aes(fill=diff_rain*1000)) +
-  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of cyclone-affected districts
+  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of extreme precip districts
   scale_fill_viridis("Precipitation Anomaly (mm/day)", option="H")+
   theme_void()+
   theme(legend.position="bottom")+
@@ -77,7 +89,7 @@ p2a <- ggplot() +
 
 p2b <- ggplot() + 
   geom_sf(data=map3, aes(fill=mean_rain*1000)) +
-  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of cyclone-affected districts
+  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of extreme precip districts
   scale_fill_viridis("Historic Precipitation (mm/day)", option="viridis", 
                      direction = -1)+
   theme_void()+
@@ -87,7 +99,7 @@ p2b <- ggplot() +
 
 p2c <- ggplot()+
   geom_sf(data=map3, aes(fill=mean_temp)) +
-  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of cyclone-affected districts
+  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of extreme precip districts
   scale_fill_viridis("Historic Temperature (C)", option="plasma", breaks=c(5, 10, 15, 20, 25))+
   theme_void()+
   theme(legend.position="bottom")+
@@ -130,8 +142,8 @@ fread("march-clim_df.csv") %>%
   mutate(pctile_dis = case_when(
     pctile > .95 ~ "> 95th",
     pctile > .90 ~ "> 90th",
-    pctile > .85 ~ "> 85th",
-    pctile <= .85 ~ "Non-extreme (< 85th)"
+    pctile >= .84 ~ ">= 84th",
+    pctile < .84 ~ "Non-extreme (< 84th)"
   )) %>%
   rename(DEPARTAMEN = id) %>%
   # append to Peru map 
@@ -141,22 +153,12 @@ fread("march-clim_df.csv") %>%
   geom_sf(aes(fill=pctile_dis))+
   scale_fill_manual("Percentile",
                     values=c("white", "#ffa590", "#ff4122", "#c61a09"),
-                    breaks=c("Non-extreme (< 85th)", "> 85th", "> 90th", "> 95th"))+
+                    breaks=c("Non-extreme (< 84th)", ">= 84th", "> 90th", "> 95th"))+
   theme_void()
 
 ggsave("figs/pctile-anomaly.pdf", height=4, width=4, units="in")
 
 #### PREPARE INPUT DATA FOR SYNTHETIC CONTROL ANALYSIS ####
-
-# select districts with cases in 2023
-case_df<-readRDS("PER_adm3_cases.RDS")
-
-# identify districts with cases reported in 2023
-cases_2023<-case_df %>%
-  filter(year==2023) %>%
-  select(ubigeo) %>%
-  unlist() %>%
-  unique()
 
 # define coastal districts (for supplemental analysis)
 coastal_dept <- c("TUMBES", "PIURA", "LAMBAYEQUE",
@@ -182,7 +184,7 @@ case_df <- readRDS("PER_adm3_cases.RDS") %>%
   filter(year <= 2023) %>%
   rename(id = ubigeo)
 
-pop_df <- readRDS("codubi_2010_2023.rds") %>%
+pop_df <- readRDS("codubi.rds") %>%
   rename(pop = pobtot,
          id = ubigeo,
          year = ano)  %>%
@@ -236,12 +238,12 @@ read_xlsx("maps/UBIGEODISTRITOS.XLSX") %>%
        select(Region, Province, District) %>%
        arrange(Region) %>%
        xtable(., type = "latex", row.names=FALSE) %>%
-       print(file = "treated-dist-names.tex", include.rownames=FALSE)
+       print(file = "figs/treated-dist-names.tex", include.rownames=FALSE)
 
 # Get table about treated, untreated, and matched control districts
 match_out_allper$table
 
-# Examine values for cyclone effects: print
+# Examine values for precip effects: print
 synth_out_allper$gsynth_obj$est.att %>% 
   tail(10)
 
@@ -311,7 +313,7 @@ plot_grid(lp[[1]],
 ggsave("figs/fl-maps.pdf", height=8, width=8, units="in")
 
 
-# Output values of cyclone-attributable cases per thousand and sort by that
+# Output values of attributable cases per thousand and sort by that
 dist_name <- coastal_dist <- read_xlsx("maps/UBIGEODISTRITOS.XLSX") %>%
   mutate(IDDIST = str_pad(IDDIST, 6, pad="0")) %>%
   rename(id = IDDIST)
@@ -418,7 +420,7 @@ scenarios_p2 <- scen_att_df %>%
   theme_classic()+
   geom_hline(yintercept=0, linetype="dashed")+
   theme(legend.position="bottom")+
-  ylab("Cyclone-attributable cases")+
+  ylab("Attributable cases")+
   xlab("Time")
 
 # combine plots and save
@@ -571,7 +573,7 @@ anom_p2 <-  anomvar_df %>%
   ggplot(aes(x=anomaly_upper, color=anomaly_lower)) + 
   geom_pointrange(aes(y=att.est*100, ymin=att.lower*100, ymax=att.upper*100),
                   stat="identity", position = position_dodge2(width = .2))+
-  xlab("Precip. Anomaly (Cyclone-affected Threshold)")+
+  xlab("Precip. Anomaly (Extreme Threshold)")+
   ylab("Attributable \nCases (%)")+
   theme_classic()+
   scale_color_viridis_d("Precip. Anomaly (Control Threshold)", direction=-1)+
@@ -594,7 +596,7 @@ anom_p31 <- anomvar_df %>%
 anom_p32 <- anomvar_df %>%
   ggplot() + 
   geom_bar(aes(x=anomaly_upper, y=ntreated, fill=anomaly_lower), stat="identity", position="dodge")+
-  ggtitle("Cyclone-affected")+
+  ggtitle("Extreme")+
   theme_classic()+
   theme(legend.position="none",  plot.title = element_text(size = 12))+
   scale_fill_viridis_d("Precip. Anomaly (Control Threshold)", direction=-1)+
@@ -654,7 +656,7 @@ for(i in 1:3){
     i <- 4
     match_num <- "All"
     # edit the match_out dataframe to include everything in the control pool
-    match_mn$match_names <- filter(match_mn$df, is_control %in% c("Cyclone-unaffected", "Matched Control")) %>%
+    match_mn$match_names <- filter(match_mn$df, is_control %in% c("Non-extreme Precipitation", "Matched Control")) %>%
       select(id) %>%
       unique() %>% 
       unlist()
@@ -746,7 +748,7 @@ mn_p31 <- mnvar_df %>%
 mn_p32 <- mnvar_df %>%
   ggplot() + 
   geom_bar(aes(x=match_num, y=ntreated), stat="identity")+
-  ggtitle("Cyclone-affected")+
+  ggtitle("Extreme Precipitation")+
   theme_classic()+
   theme(legend.position="none",  plot.title = element_text(size = 12))+
   ylab("n")+
@@ -996,7 +998,7 @@ load("covar_df.RData")
 # load in the matching and gsynth results
 load("peru-main.RData")
 
-# filter covariates to the cyclone-affected districts
+# filter covariates to the extreme precip districts
 covar_df %<>%
   filter(id %in% match_out_allper$treated_names)
 
@@ -1056,7 +1058,7 @@ pca_res$scores %>%
   data.frame() %>%
   cbind(covar_df, .) -> covar_df
 
-# extract cyclone-attributable incidence in each district across the post-cyclone period (April 22 - Nov 3)
+# extract attributable incidence in each district across the post-cyclone period (April 22 - Nov 3)
 eff_ind <- which(rownames(synth_out_allper$gsynth_obj$est.att) %in% c("3", "4", "5", "6", "7", "8", "9"))
 
 sapply(covar_df$id, function(dist_id) synth_out_allper$gsynth_obj$eff[eff_ind, which(synth_out_allper$gsynth_obj$id==dist_id)] %>% sum()) %>%
@@ -1086,8 +1088,10 @@ boot_sample <-  boot_vals %>%
   slice_sample(n=609) %>%
   ungroup()
 
+
+#### IMPORTANT: THESE NEED TO BE UPDATED
 # for each bootstrap, refit the model and store the coefficients 
-# here, we're resampling across both cyclone-affected districts and their bootstrapped estimates
+# here, we're resampling across both extreme precip districts and their bootstrapped estimates
 suppressWarnings(boot_mod <- lapply(1:1000, function(i) slice_sample(boot_sample, n=55, replace=TRUE) %>%
                                       left_join(., covar_df %>% dplyr::select(-ATT), by="id") %>%
                                       lm(ATT~RC1+RC2+RC3+RC4, data=.)  %>% 
@@ -1113,7 +1117,7 @@ boot_mod$var <-  ifelse(boot_mod$var == "X.Intercept.", "Intercept", boot_mod$va
 
 RC_labs$y <- c(20, 10, 20, 10)
 
-# plot the relationship between the RCs and cyclone-attributable incidence
+# plot the relationship between the RCs and attributable incidence
 p1 <- boot_mod %>%
   filter(var!="Intercept") %>%
   ggplot() + 
@@ -1124,11 +1128,11 @@ p1 <- boot_mod %>%
              aes(x = name, label = lab, y = y), size = 2)+
   theme_classic()+
   scale_y_continuous(limits=c(-10, 25))+
-  ylab("Cyclone-attributable \ncases per thousand")+
+  ylab("Attributable \ncases per thousand")+
   xlab("Factor")+
   theme(text=element_text(size=10))
 
-# plot the temperature vs cyclone-attributable cases
+# plot the temperature vs attributable cases
 p2 <- boot_vals %>% 
   group_by(id) %>%
   summarize(min.eff = quantile(ATT, .025),
@@ -1143,7 +1147,7 @@ p2 <- boot_vals %>%
   geom_hline(yintercept=0, linetype="dashed", color="maroon") +
   geom_vline(xintercept=24, linetype="dashed", color="maroon") +
   xlab("Mean Temperature During Yaku (C)")+
-  ylab("Cyclone-attributable \ncases per thousand")+
+  ylab("Attributable \ncases per thousand")+
   theme(text=element_text(size=10))
 
 plot_grid(p1, p2, nrow=2, labels="AUTO")
