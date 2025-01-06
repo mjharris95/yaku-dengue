@@ -10,7 +10,7 @@ aedes_r0 <- read.csv("AedesR0Out.csv")
 temps_list <- ee$List(aedes_r0$temperature)
 aedesr0_list <- ee$List(aedes_r0$aegypti.R0.median)
 
-country <- "ECU2"
+country <- "PER3"
 
 # submit runs for different countries separately.  Set country here to submit a run.
 # options are PER (Peru, admin1), PER3 (Peru, adm3), BRA (Brazil, admin1), MEX (Mexico, admin1),
@@ -37,8 +37,8 @@ adm_lev <- switch(
   "ECU2" = "ADM2_PCODE",
   "COL" = "ADM1_PCODE")   
 
-# extract climate covariates from 2016 through the end of 2023 (change to 2010 start if desired for Peru districts)
-proj_start = "2016-01-01" 
+# extract climate covariates from 2018 through the end of 2023 (change to 2009 start if desired for Peru districts)
+proj_start = "2009-06-01" # get a few extra months for appropriate climate lags
 proj_end <- "2023-12-31"
 
 # defines how many chunks to break the time series into -> more, smaller chunks may run more quickly 

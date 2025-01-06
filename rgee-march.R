@@ -1,5 +1,5 @@
-library(reticulate)
-use_condaenv("rgee", conda="auto", required = TRUE)
+#library(reticulate)
+#use_condaenv("rgee", conda="auto", required = TRUE)
 
 library(rgee)
 library(tidyverse)

@@ -221,8 +221,8 @@ match_out_allper <- match_fun(anomaly_upper = .0085, anomaly_lower = .007,
                               map=per_map, big_map=dept_map)
 
 synth_out_allper <- synth_fun(case_df, match_out_allper, pop_df, "adm3-allper", 
-                              att_plot=TRUE, spatt_plot=FALSE, map=per_map, 
-                              big_map=dept_map, use_clim=TRUE, use_r0=FALSE,
+                              att_plot=TRUE, spatt_plot=TRUE, map=per_map, 
+                              big_map=dept_map, use_clim=FALSE, use_r0=FALSE,
                               start_year = 2016, inc=TRUE)
 
 # save matching and synthetic control outputs

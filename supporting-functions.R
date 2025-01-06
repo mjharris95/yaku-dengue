@@ -836,11 +836,21 @@ synth_fun <- function(case_df, match_out, pop_df, file_prefix,
     df <- fread("clim_df.csv") %>%
       # filter to treated and matched control regions
       filter(id %in% incl_units) %>%
-      filter(date <= as_date("2023-12-31")) %>%
+      filter(date <= as_date("2023-12-31")) 
+    
+    # set up appropriate lags
+    df <- left_join(df %>% 
+              select(-rain) %>%
+              mutate(date = date + 63),
+              df %>% 
+                select(-c("temp", "rel_r0")) %>%
+                mutate(date = date + 42))
+    df %<>%  
       # convert to epiweek
       mutate(week=epiweek(date), year=year(date), month=month(date))  %>%
       # sometimes the last few days of a year get assigned to first epiweek of following year
       mutate(year = ifelse(week == 1 & month == 12, year+1, year)) %>%
+      mutate(id = str_pad(id, 6, pad="0")) %>%
       group_by(week, year, id) %>%
       dplyr::summarize(mean_temp = mean(temp),
                        mean_rain = mean(rain),
@@ -855,14 +865,25 @@ synth_fun <- function(case_df, match_out, pop_df, file_prefix,
       filter(year <= 2023)
   } else{
     # still read in the climate covariates even though we won't use them to make sure the same districts are studied
+    # read in climate
     df <- fread("clim_df.csv") %>%
       # filter to treated and matched control regions
       filter(id %in% incl_units) %>%
-      filter(date <= as_date("2023-12-31")) %>%
+      filter(date <= as_date("2023-12-31")) 
+    
+    # set up appropriate lags
+    df <- left_join(df %>% 
+                      select(-rain) %>%
+                      mutate(date = date + 63),
+                    df %>% 
+                      select(-c(temp, rel_r0)) %>%
+                      mutate(date = date + 42))
+    df %<>%  
       # convert to epiweek
       mutate(week=epiweek(date), year=year(date), month=month(date))  %>%
       # sometimes the last few days of a year get assigned to first epiweek of following year
       mutate(year = ifelse(week == 1 & month == 12, year+1, year)) %>%
+      mutate(id = str_pad(id, 6, pad="0")) %>%
       group_by(week, year, id) %>%
       dplyr::summarize(mean_temp = mean(temp),
                        mean_rain = mean(rain),
@@ -989,6 +1010,7 @@ synth_fun <- function(case_df, match_out, pop_df, file_prefix,
            group="group",
            W="weight")
   }
+  print("ran")
   
   # get population weights for bootstraps
   if(inc == TRUE){

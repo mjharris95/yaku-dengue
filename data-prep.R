@@ -23,7 +23,7 @@ for(file in files){
 write.csv(march_df, "march-clim_df.csv", row.names=FALSE)
 
 # Climate from 2016 to 2023 (used for matching)
-files <- dir("/clim-tomatch") # assumes all of the rgee files for matching are in a folder called "clim-tomatch"
+files <- dir("clim-tomatch") # assumes all of the rgee files for matching are in a folder called "clim-tomatch"
 
 df <- data.frame()
 
