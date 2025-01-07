@@ -184,6 +184,13 @@ case_df <- readRDS("PER_adm3_cases.RDS") %>%
   filter(year <= 2023) %>%
   rename(id = ubigeo)
 
+# identify districts with cases reported in 2023
+cases_2023<-case_df %>%
+  filter(year==2023) %>%
+  select(id) %>%
+  unlist() %>%
+  unique()
+
 pop_df <- readRDS("codubi.rds") %>%
   rename(pop = pobtot,
          id = ubigeo,
@@ -207,6 +214,8 @@ for(test_year in 2016:2010){
     rbind(pop_df) -> pop_df
 }  
 
+pop_df %<>% filter(!is.na(pop))
+
 
 
 #### RUN MAIN ANALYSIS: MATCHING AND SYNTHETIC CONTROL, OUTPUT RESULTS  ####
@@ -221,8 +230,8 @@ match_out_allper <- match_fun(anomaly_upper = .0085, anomaly_lower = .007,
                               map=per_map, big_map=dept_map)
 
 synth_out_allper <- synth_fun(case_df, match_out_allper, pop_df, "adm3-allper", 
-                              att_plot=TRUE, spatt_plot=TRUE, map=per_map, 
-                              big_map=dept_map, use_clim=FALSE, use_r0=FALSE,
+                              att_plot=TRUE, spatt_plot=FALSE, map=per_map, 
+                              big_map=dept_map, use_clim=TRUE, use_r0=FALSE,
                               start_year = 2016, inc=TRUE)
 
 # save matching and synthetic control outputs
@@ -353,7 +362,7 @@ synth_out_coast_noclim <- synth_fun(case_df, match_out_coast, pop_df, "adm3-coas
                                     inc=TRUE,
                                     start_year = 2016)
 
-
+save(synth_out_coast, synth_out_allper_noclim, synth_out_coast_noclim, file="scenarios.RData")
 # compare no clim/with clim x coastal/all districts
 i <- 1
 rsq_df <- data.frame()
@@ -462,8 +471,8 @@ synth_out_allper_nocovid$gsynth_obj$Y.ct <- rbind(synth_out_allper_nocovid$gsynt
                                                   synth_out_allper_nocovid$gsynth_obj$Y.ct[131:156,])
 
 # extract population weights
-tr_pop <- pop_df %>% filter(year==2023 & id %in% act.locs) %>% select(pop, id) %>% distinct() %>% filter(!is.na(pop)) %>% select(pop) %>% sum()
 act.locs <- synth_out_allper_nocovid$gsynth_obj $id[synth_out_allper_nocovid$gsynth_obj$tr]
+tr_pop <- pop_df %>% filter(year==2023 & id %in% act.locs) %>% select(pop, id) %>% distinct() %>% filter(!is.na(pop)) %>% select(pop) %>% sum()
 act.pops <- sapply(act.locs, function(loc) pop_df$pop[which(pop_df$id == loc & pop_df$year == 2023)])
 act.weights <- unlist(act.pops)/tr_pop
 

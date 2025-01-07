@@ -440,9 +440,10 @@ att_print <- function(gsynth_out, case_df, cyclone_step,
                mid_pct=num_attr/num_inc,
                obs_inc=num_inc,
                obs_cases=num_inc*pop,
-               mid_cases=num_attr*pop,
-               lower_cases=lower_inc*pop,
-               upper_cases=upper_inc*pop)
+               mid_cases=num_attr*pop)
+  
+  vals$lower_cases <- vals$lower_pct * vals$obs_cases
+  vals$upper_cases <- vals$upper_pct * vals$obs_cases
   
   # print the main result, including percent attributable cases
   print(paste0(round(vals$mid_cases), " (", round(vals$lower_cases), ", ", round(vals$upper_cases), ") cases were attributable to extreme precip, out of ", vals$obs_cases, " (", round(vals$mid_pct*100, digits=2), "%)"))
@@ -600,7 +601,8 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .007,
   }
     
   # identify extreme precip, non-extreme precip, and buffer units in Peru based on upper/lower anomaly threshold
-  anomaly_df <- read.csv("anomaly_df.csv")
+  anomaly_df <- read.csv("anomaly_df.csv") %>%
+                mutate(id = str_pad(id, 6, pad="0"))
   
   anomaly_df %>% filter(diff_rain>anomaly_upper & country %in% c("PER3", "PER")) %>% select(id) %>% unique() %>% unlist() -> extreme_ids
   anomaly_df %>% filter(diff_rain<=anomaly_lower) %>% select(id) %>% unique() %>% unlist() -> nonextreme_ids
@@ -613,7 +615,8 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .007,
   }
     
   # read in climate dataframe for matching
-  clim_df <- read.csv("clim_df.csv") 
+  clim_df <- read.csv("clim_df.csv") %>%
+    mutate(id = str_pad(id, 6, pad="0"))
   
   # if coastal_dist and cases_2023 aren't specified, choose everywhere
   if(length(coastal_dist)==0){
@@ -834,29 +837,29 @@ synth_fun <- function(case_df, match_out, pop_df, file_prefix,
   if(use_clim == TRUE){
     # read in climate
     df <- fread("clim_df.csv") %>%
+      mutate(id = str_pad(id, 6, pad="0")) %>%
       # filter to treated and matched control regions
       filter(id %in% incl_units) %>%
-      filter(date <= as_date("2023-12-31")) 
+      filter(date <= as_date("2023-12-31"))    
     
     # set up appropriate lags
     df <- left_join(df %>% 
-              select(-rain) %>%
-              mutate(date = date + 63),
-              df %>% 
-                select(-c("temp", "rel_r0")) %>%
-                mutate(date = date + 42))
-    df %<>%  
+                      select(-rain) %>%
+                      mutate(date = date + 63),
+                    df %>% 
+                      select(-c(temp, rel_r0)) %>%
+                      mutate(date = date + 42))
+    df %<>%    
       # convert to epiweek
       mutate(week=epiweek(date), year=year(date), month=month(date))  %>%
       # sometimes the last few days of a year get assigned to first epiweek of following year
       mutate(year = ifelse(week == 1 & month == 12, year+1, year)) %>%
-      mutate(id = str_pad(id, 6, pad="0")) %>%
       group_by(week, year, id) %>%
       dplyr::summarize(mean_temp = mean(temp),
                        mean_rain = mean(rain),
                        mean_rel_r0 = mean(rel_r0)) %>%
       left_join(case_df) %>%
-      filter(!is.na(mean_temp)) %>%
+      filter(!is.na(mean_temp) & !is.na(year)) %>%
       filter(id %in% incl_units) %>%
       # filter to specified time period
       filter(year >= start_year) %>%
@@ -867,6 +870,7 @@ synth_fun <- function(case_df, match_out, pop_df, file_prefix,
     # still read in the climate covariates even though we won't use them to make sure the same districts are studied
     # read in climate
     df <- fread("clim_df.csv") %>%
+      mutate(id = str_pad(id, 6, pad="0")) %>%
       # filter to treated and matched control regions
       filter(id %in% incl_units) %>%
       filter(date <= as_date("2023-12-31")) 
@@ -883,13 +887,12 @@ synth_fun <- function(case_df, match_out, pop_df, file_prefix,
       mutate(week=epiweek(date), year=year(date), month=month(date))  %>%
       # sometimes the last few days of a year get assigned to first epiweek of following year
       mutate(year = ifelse(week == 1 & month == 12, year+1, year)) %>%
-      mutate(id = str_pad(id, 6, pad="0")) %>%
       group_by(week, year, id) %>%
       dplyr::summarize(mean_temp = mean(temp),
                        mean_rain = mean(rain),
                        mean_rel_r0 = mean(rel_r0)) %>%
       left_join(case_df) %>%
-      filter(!is.na(mean_temp)) %>%
+      filter(!is.na(mean_temp) & !is.na(year)) %>%
       # don't actually need the climate covariates
       mutate(mean_temp = NA,
              mean_rain = NA,
@@ -898,7 +901,7 @@ synth_fun <- function(case_df, match_out, pop_df, file_prefix,
       filter(year >= start_year) %>%
       filter(! year %in% exclude_year) %>%
       filter(week <= end_week) %>%
-      filter(year <= 2023)
+      filter(year <= 2023) 
   }
   
   # we'll use this to group into 4-week periods
@@ -972,7 +975,7 @@ synth_fun <- function(case_df, match_out, pop_df, file_prefix,
   if(use_clim == TRUE){
     if(use_r0 == TRUE){
       gsynth_out <- df %>%
-        fect(y ~ int + mean_rel_r0 + mean_rain, data = ., 
+        fect(y ~ int + mean_rel_r0, data = ., 
              index=c("id", "step"), 
              force = "two-way", 
              method=method,
@@ -985,7 +988,7 @@ synth_fun <- function(case_df, match_out, pop_df, file_prefix,
   # model without climate covariates
     } else {
       gsynth_out <- df %>%
-        fect(y ~ int + mean_temp + mean_rain, data = ., 
+        fect(y ~ int + mean_temp, data = ., 
              index=c("id", "step"), 
              force = "two-way", 
              method=method,
