@@ -75,12 +75,12 @@ map3 <- read_sf("maps/CDC_Distritos.shp") %>%
 
 map3 %>%  filter(country=="PER3") %>%
   filter(diff_rain > .0085 & id %in% cases_2023) %>%
-  summarise(id = "extreme") -> extreme_map3 # treated districts most heavily impacted by extreme precip
+  summarise(id = "anomalous") -> anomalous_map3 # treated districts most heavily impacted by anomalous precip
 
 # merge data and plot for adm1
 p2a <- ggplot() + 
   geom_sf(data=map3, aes(fill=diff_rain*1000)) +
-  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of extreme precip districts
+  geom_sf(data = anomalous_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of anomalous precip districts
   scale_fill_viridis("Precipitation Anomaly (mm/day)", option="H")+
   theme_void()+
   theme(legend.position="bottom")+
@@ -89,7 +89,7 @@ p2a <- ggplot() +
 
 p2b <- ggplot() + 
   geom_sf(data=map3, aes(fill=mean_rain*1000)) +
-  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of extreme precip districts
+  geom_sf(data = anomalous_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of anomalous precip districts
   scale_fill_viridis("Historic Precipitation (mm/day)", option="viridis", 
                      direction = -1)+
   theme_void()+
@@ -99,7 +99,7 @@ p2b <- ggplot() +
 
 p2c <- ggplot()+
   geom_sf(data=map3, aes(fill=mean_temp)) +
-  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of extreme precip districts
+  geom_sf(data = anomalous_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of anomalous precip districts
   scale_fill_viridis("Historic Temperature (C)", option="plasma", breaks=c(5, 10, 15, 20, 25))+
   theme_void()+
   theme(legend.position="bottom")+
@@ -143,7 +143,7 @@ fread("march-clim_df.csv") %>%
     pctile > .95 ~ "> 95th",
     pctile > .90 ~ "> 90th",
     pctile >= .84 ~ ">= 84th",
-    pctile < .84 ~ "Non-extreme (< 84th)"
+    pctile < .84 ~ "Non-anomalous (< 84th)"
   )) %>%
   rename(DEPARTAMEN = id) %>%
   # append to Peru map 
@@ -153,7 +153,7 @@ fread("march-clim_df.csv") %>%
   geom_sf(aes(fill=pctile_dis))+
   scale_fill_manual("Percentile",
                     values=c("white", "#ffa590", "#ff4122", "#c61a09"),
-                    breaks=c("Non-extreme (< 84th)", ">= 84th", "> 90th", "> 95th"))+
+                    breaks=c("Non-anomalous (< 84th)", ">= 84th", "> 90th", "> 95th"))+
   theme_void()
 
 ggsave("figs/pctile-anomaly.pdf", height=4, width=4, units="in")
@@ -278,7 +278,7 @@ synth_out_allper$gsynth_obj$est.att %>%
   mutate(`Dates` = paste(start_date, "-", end_date)) %>%
   select(`Dates`, `Percent Attributable Cases`, `Number Attributable Cases`, `Reported Cases`, `p-value`) %>%
   xtable(., type = "latex", row.names=FALSE, digits=c(0,0,0,0,0,3)) %>%
-  print(file = "adm3-allper_table.tex", include.rownames=FALSE)
+  print(file = "figs/adm3-allper_table.tex", include.rownames=FALSE)
 
 # Output table for covariate coefficients
 synth_out_allper$gsynth_obj$est.beta
@@ -582,7 +582,7 @@ anom_p2 <-  anomvar_df %>%
   ggplot(aes(x=anomaly_upper, color=anomaly_lower)) + 
   geom_pointrange(aes(y=att.est*100, ymin=att.lower*100, ymax=att.upper*100),
                   stat="identity", position = position_dodge2(width = .2))+
-  xlab("Precip. Anomaly (Extreme Threshold)")+
+  xlab("Precip. Anomaly (Anomalous Threshold)")+
   ylab("Attributable \nCases (%)")+
   theme_classic()+
   scale_color_viridis_d("Precip. Anomaly (Control Threshold)", direction=-1)+
@@ -605,7 +605,7 @@ anom_p31 <- anomvar_df %>%
 anom_p32 <- anomvar_df %>%
   ggplot() + 
   geom_bar(aes(x=anomaly_upper, y=ntreated, fill=anomaly_lower), stat="identity", position="dodge")+
-  ggtitle("Extreme")+
+  ggtitle("Anomalous")+
   theme_classic()+
   theme(legend.position="none",  plot.title = element_text(size = 12))+
   scale_fill_viridis_d("Precip. Anomaly (Control Threshold)", direction=-1)+
@@ -625,6 +625,7 @@ plot_grid(plot_grid(anom_p1, anom_p3, ncol=2, rel_widths=c(3,2), labels="AUTO"),
 
 
 ggsave(file="figs/anomaly-variation.png", height=6, width=10, units="in")
+
 
 ### Test out varying the number of control units to which each treated is matched (match number, mn)
 # initialize dataframe and list to store values
@@ -665,7 +666,7 @@ for(i in 1:3){
     i <- 4
     match_num <- "All"
     # edit the match_out dataframe to include everything in the control pool
-    match_mn$match_names <- filter(match_mn$df, is_control %in% c("Non-extreme Precipitation", "Matched Control")) %>%
+    match_mn$match_names <- filter(match_mn$df, is_control %in% c("Non-anomalous Precipitation", "Matched Control")) %>%
       select(id) %>%
       unique() %>% 
       unlist()
@@ -757,7 +758,7 @@ mn_p31 <- mnvar_df %>%
 mn_p32 <- mnvar_df %>%
   ggplot() + 
   geom_bar(aes(x=match_num, y=ntreated), stat="identity")+
-  ggtitle("Extreme Precipitation")+
+  ggtitle("Anomalous Precipitation")+
   theme_classic()+
   theme(legend.position="none",  plot.title = element_text(size = 12))+
   ylab("n")+
@@ -896,7 +897,7 @@ match_out_adm1 <- match_fun(anomaly_upper = .007, anomaly_lower = NA,
                             my_country = c("PER", "COL1", "ECU1", "MEX", "BRA1"), 
                             plot_bal=FALSE, plot_map=FALSE, file_prefix="adm1",
                             map=five_map, big_map=country_bounds,
-                            treated_names = extreme_adm1)
+                            treated_names = anomalous_adm1)
 
 pop_df_adm1 <- expand_grid(id=c(match_out_adm1$match_names, match_out_adm1$treated_names),
                            year = 2018:2023)  %>% 
@@ -926,6 +927,7 @@ files <- dir("cov")
 #exclude population density
 files <- files[!startsWith(files, "r_dpob")]
 
+covar_df <- c()
 # loop through covariate files
 for(file in files[startsWith(files, "r_")]){
   
@@ -1007,7 +1009,7 @@ load("covar_df.RData")
 # load in the matching and gsynth results
 load("peru-main.RData")
 
-# filter covariates to the extreme precip districts
+# filter covariates to the anomalous precip districts
 covar_df %<>%
   filter(id %in% match_out_allper$treated_names)
 
@@ -1100,7 +1102,7 @@ boot_sample <-  boot_vals %>%
 
 #### IMPORTANT: THESE NEED TO BE UPDATED
 # for each bootstrap, refit the model and store the coefficients 
-# here, we're resampling across both extreme precip districts and their bootstrapped estimates
+# here, we're resampling across both anomalous precip districts and their bootstrapped estimates
 suppressWarnings(boot_mod <- lapply(1:1000, function(i) slice_sample(boot_sample, n=55, replace=TRUE) %>%
                                       left_join(., covar_df %>% dplyr::select(-ATT), by="id") %>%
                                       lm(ATT~RC1+RC2+RC3+RC4, data=.)  %>% 

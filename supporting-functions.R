@@ -2,7 +2,7 @@
 
 # Returns a plot of the standardized difference between climate covariates in treated 
 # and scatterplot of mean temperature vs precipitation
-# in extreme vs non-extreme precip (before and afterr matching) districts
+# in Anomalous vs non-Anomalous precip (before and after matching) districts
 #
 # Inputs: match_out: output from the match_fun function
 #         cyclone_step: index when cyclone occurred (can be retrieved from match_fun)
@@ -15,7 +15,7 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
   # Scatterplot of mean temperature vs precipitation prior to matching 
    scatter_bal_df <- match_out$df %>%
                         filter(is_control == "Matched Control") %>%
-                        mutate(is_control = "Extreme precipitation") %>%
+                        mutate(is_control = "Anomalous precipitation") %>%
                         rbind(match_out$df) %>%
                         filter(step < cyclone_step) %>%
                         group_by(is_control, step) %>%
@@ -25,7 +25,7 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
   ggplot() + 
     geom_point(data = scatter_bal_df,
                aes(x=wmean_temp, y=wmean_rain, color=is_control)) +
-    stat_smooth(data = scatter_bal_df %>% filter(is_control=="Extreme Precipitation"),
+    stat_smooth(data = scatter_bal_df %>% filter(is_control=="Anomalous Precipitation"),
                 aes(y=wmean_rain, x=wmean_temp), 
                 method = "lm", 
                 formula = y ~ x, 
@@ -36,7 +36,7 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
     xlab("Temperature")+
     theme(legend.position="bottom")+
     scale_color_manual("",
-                       breaks = c("Extreme Precipitation", "Matched Control", "Non-extreme Precipitation", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
+                       breaks = c("Anomalous Precipitation", "Matched Control", "Non-anomalous Precipitation", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
                        values = c("#581845", "#6FC0DB", "#FFC300", "grey90", "grey50", "maroon"))
   
   ggsave(paste0("figs/", file_prefix, "clim_matchscatter.pdf"), height=6, width=8, units="in")
@@ -47,7 +47,7 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
   
   # calculate the differences before matching
   prediff_df <-  lapply(1:length(match_out$treated_names), function(n)
-    filter(baldf, !is_control == "Extreme Precipitation") %>%
+    filter(baldf, !is_control == "Anomalous Precipitation") %>%
       select(id, step, date_end, mean_rain, mean_temp) %>%
       left_join(., baldf %>% 
                   filter(id == match_out$treated_names[n]) %>%
@@ -136,7 +136,7 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
 
 #### CLIMATE TIME SERIES PLOT ####
 
-# Returns a plot of mean climate conditions over time in the extreme/non-extreme precip
+# Returns a plot of mean climate conditions over time in the anomalous/non-anomalous precip
 # and matched control districts
 #
 # Inputs: match_out: output from the match_fun function
@@ -154,9 +154,9 @@ climts_plot <- function(match_out, cyclone_step, file_prefix,
   
     
   clim_ts <- match_df %>%
-    # also include the matched control districts in the non-extreme precip group
+    # also include the matched control districts in the non-anomalous precip group
     filter(is_control == "Matched Control") %>%
-    mutate(is_control = "Non-extreme Precipitation") %>%
+    mutate(is_control = "Non-anomalous Precipitation") %>%
     rbind(match_df) %>%
     group_by(is_control, step) %>%
     # take a weighted mean (some matched control districts are included multiple times)
@@ -172,7 +172,7 @@ climts_plot <- function(match_out, cyclone_step, file_prefix,
       geom_rect(xmin = cyclone_step, xmax  = cyclone_step + 1, ymin=-Inf, ymax=Inf, alpha=.5, fill="grey70", color="grey70")+
       geom_line(aes(x=step, y=Temperature, group=is_control, color=is_control), alpha=.8)+
       scale_color_manual("",
-                         breaks = c("Extreme Precipitation", "Matched Control", "Non-extreme Precipitation", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
+                         breaks = c("Anomalous Precipitation", "Matched Control", "Non-anomalous Precipitation", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
                          values = c("#581845", "#6FC0DB", "#FFC300", "grey90", "grey50", "maroon"))+
       theme_classic()+
       xlab("Year")+
@@ -188,7 +188,7 @@ climts_plot <- function(match_out, cyclone_step, file_prefix,
     geom_rect(xmin = cyclone_step, xmax  = cyclone_step + 1, ymin=-Inf, ymax=Inf, alpha=.5, fill="grey70", color="grey70")+
     geom_line(aes(x=step, y=Precipitation, group=is_control, color=is_control), alpha=.8)+
     scale_color_manual("",
-                       breaks = c("Extreme Precipitation", "Matched Control", "Non-extreme Precipitation", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
+                       breaks = c("Anomalous Precipitation", "Matched Control", "Non-anomalous Precipitation", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
                        values = c("#581845", "#6FC0DB", "#FFC300", "grey90", "grey50", "maroon"))+
     theme_classic()+
     xlab("Year")+
@@ -204,7 +204,7 @@ climts_plot <- function(match_out, cyclone_step, file_prefix,
     geom_rect(xmin = cyclone_step, xmax  = cyclone_step + 1, ymin=-Inf, ymax=Inf, alpha=.5, fill="grey70", color="grey70")+
     geom_line(aes(x=step, y=Rel_R0, group=is_control, color=is_control), alpha=.8)+
     scale_color_manual("",
-                       breaks = c("Extreme Precipitation", "Matched Control", "Non-extreme Precipitation", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
+                       breaks = c("Anomalous Precipitation", "Matched Control", "Non-anomalous Precipitation", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
                        values = c("#581845", "#6FC0DB", "#FFC300", "grey90", "grey50", "maroon"))+
     theme_classic()+
     xlab("Year")+
@@ -257,7 +257,7 @@ climts_plot <- function(match_out, cyclone_step, file_prefix,
 
 #### DISTRICT MAP FOR MATCHING  ####
 
-# Returns a plot of districts color-coded by extreme precip, non-extreme precip, matched control,
+# Returns a plot of districts color-coded by anomalous precip, non-anomalous precip, matched control,
 # or reason for exclusions from analysis
 #
 # Inputs: map: shapefile of spatial units at level used for analysis
@@ -301,7 +301,7 @@ matchmap_plot <- function(map, big_map, file_prefix, match_out,
     geom_sf(data = big_map, fill=NA, color="black", lwd=.8) + # bolds borders of big_map
     theme_void()+
     scale_fill_manual("",
-                      breaks = c("Extreme Precipitation", "Matched Control", "Non-extreme Precipitation", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
+                      breaks = c("Anomalous Precipitation", "Matched Control", "Non-anomalous Precipitation", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
                       values = c("#581845", "#6FC0DB", "#FFC300", "grey90", "grey50", "maroon"))
   ggsave(paste0("figs/", file_prefix, "-matchmap.png"), height=4, width=8, units="in")
 }
@@ -312,8 +312,8 @@ matchmap_plot <- function(map, big_map, file_prefix, match_out,
 # Inputs: case_df: a dataframe of case reports by week, year, and unit id
 #         gsynth_out: gsynth object (can acess by running fect or calling the $gsynth_out entry from synth_fun)
 #         cyclone_step: index when cyclone occurred (can be retrieved from synth_fun)
-#         pop: full population size of the extreme precip districts 
-#         pop.weights: population weights for the extreme precip districts (in the orde rof gsynth_out$tr)
+#         pop: full population size of the anomalous precip districts 
+#         pop.weights: population weights for the anomalous precip districts (in the orde rof gsynth_out$tr)
 #         file_prefix: prefix to save pdf image
 #         years: the years over which climate data is provided (can be retrieved from match_fun)
 #         year_ind: the indices for when a new year starts (can be retrieved from match_fun)
@@ -354,12 +354,12 @@ att_plot <- function(case_df, gsynth_out, cyclone_step,
             theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
                   text=element_text(size=14))
           
-  ts_cases <- gsynth_out$Y.ct[,treated_ind] %>% # counterfactual cases in extreme precip districts
+  ts_cases <- gsynth_out$Y.ct[,treated_ind] %>% # counterfactual cases in anomalous precip districts
                 apply(1, function(x) sum(x*pop.weights)*pop) %>% # convert from incidence to raw cases, sum across districts
                 data.frame(cases=.) %>%
                 mutate(time = row_number(),
                        group="Synthetic Control") %>% # label these as belonging to synthetic control
-                rbind(data.frame(group="Observed", # actual cases in extreme precip units
+                rbind(data.frame(group="Observed", # actual cases in anomalous precip units
                                  cases = gsynth_out$est.att$obs.cases) %>%
                         mutate(time = row_number()))
   
@@ -403,7 +403,7 @@ att_plot <- function(case_df, gsynth_out, cyclone_step,
 #         upper_inc: the upper estimate for 95% confidence interval on attributable incidence
 #         lower_pct: the lower estimate for 95% confidence interval on percent attributable cases
 #         upper_pct: the upper estimate for 95% confidence interval on percent attributable cases
-#         mid_pct: the percent of cases attributable to extreme precip
+#         mid_pct: the percent of cases attributable to anomalous precip
 #         obs_inc: observed incidence
 #         obs_cases: observed cases
 #         mid_cases: the number of attributable cases 
@@ -412,9 +412,9 @@ att_plot <- function(case_df, gsynth_out, cyclone_step,
 
 att_print <- function(gsynth_out, case_df, cyclone_step,
                       pop_weights, pop,
-                      tr_ind = c("3", "4", "5", "6", "7", "8", "9", "10")){
+                      tr_ind = c("2", "3", "4", "5")){
   
-  # will use these to select extreme precip entries
+  # will use these to select anomalous precip entries
   treated_ind <- gsynth_out$tr
   ntreated <- length(treated_ind)
   time_ind <- which(rownames(gsynth_out$est.att) %in% tr_ind)
@@ -446,10 +446,11 @@ att_print <- function(gsynth_out, case_df, cyclone_step,
   vals$upper_cases <- vals$upper_pct * vals$obs_cases
   
   # print the main result, including percent attributable cases
-  print(paste0(round(vals$mid_cases), " (", round(vals$lower_cases), ", ", round(vals$upper_cases), ") cases were attributable to extreme precip, out of ", vals$obs_cases, " (", round(vals$mid_pct*100, digits=2), "%)"))
+  print(paste0(round(vals$mid_cases), " (", round(vals$lower_cases), ", ", round(vals$upper_cases), ") cases were attributable to anomalous precip, out of ", vals$obs_cases, " (", round(vals$mid_pct*100, digits=2), "%)"))
   
   return(vals)
 }
+
 
 #### SPATIAL TREATMENT EFFECT PLOT ####
 
@@ -553,27 +554,27 @@ spatt_plot <- function(gsynth_out, map, big_map, file_prefix,
 
 #### MATCHING FUNCTION ####
 
-# Matches extreme precip districts to non-extreme precip districts with most similar climate conditions
+# Matches anomalous precip districts to non-anomalous precip districts with most similar climate conditions
 # and generates tables and (optional) plots related to this process
 #
-# Inputs: anomaly_upper: upper threshold for precipitation anomaly (above this considered extreme)
-#         anomaly_lower: lower threshold for precipitation anomaly (below this considered non-extreme)
+# Inputs: anomaly_upper: upper threshold for precipitation anomaly (above this considered anomalous)
+#         anomaly_lower: lower threshold for precipitation anomaly (below this considered non-anomalous)
 #                         anomaly lower must be less or equal to anomaly upper
 #         coastal_dist:  optional, vector of coastal units if analysis should only be conducted on them
 #         cases_2023:   optional, vector of units that reported cases in 2023 (other units excluded)
 #         my_country:   countries to include in analysis. PER3 is Peru at admin level 3 (district)
 #                       use this for region-level analysis: c("PER", "COL1", "ECU1", "MEX", "BRA1") - removed
-#         match_num: how many non-extreme units each extreme precip district should be matched to
+#         match_num: how many non-anomalous units each anomalous precip district should be matched to
 #         plot_bal: TRUE/FALSE, whether to plot standardized difference and mean values over time for climate covariates (to visualize balance
-#         plot_map: TRUE/FALSE, whether to plot map of which units were extreme precip, non-extreme precip, matched control, excluded
+#         plot_map: TRUE/FALSE, whether to plot map of which units were anomalous precip, non-anomalous precip, matched control, excluded
 #         file_prefix: prefix to save pdf image (if plot_bal or plot_map is true)
 #         map: shapefile of spatial units at level used for analysis (if plot_map is true)
 #         big_map: shapefile of spatial units at higher administrative division to indicate borders (if plot_map is true)
 #         treated_names: leave empty to use the default defined by anomaly_upper, otherwise override and set your own treated districts
 # Output: a pdf figures in the figs folder if requested and a list with the following entries
-#         table: a table describing mean values across non-extreme precip, extreme precip, and control groups
+#         table: a table describing mean values across non-anomalous precip, anomalous precip, and control groups
 #         match_names: names of the units included in matched control pool
-#         df: climate covariates over time and designation (extreme precip, non-extreme precip, control) for each district
+#         df: climate covariates over time and designation (anomalous precip, non-anomalous precip, control) for each district
 #         treated_names: names of treated units
 #         match_obj: output of the PanelMatch package
 #         balance: output of get_covariate_balance, gives standardized difference over time with respect to climate covariates
@@ -600,18 +601,18 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .007,
     stop("Provide map to plot")
   }
     
-  # identify extreme precip, non-extreme precip, and buffer units in Peru based on upper/lower anomaly threshold
+  # identify anomalous precip, non-anomalous precip, and buffer units in Peru based on upper/lower anomaly threshold
   anomaly_df <- read.csv("anomaly_df.csv") %>%
                 mutate(id = str_pad(id, 6, pad="0"))
   
-  anomaly_df %>% filter(diff_rain>anomaly_upper & country %in% c("PER3", "PER")) %>% select(id) %>% unique() %>% unlist() -> extreme_ids
-  anomaly_df %>% filter(diff_rain<=anomaly_lower) %>% select(id) %>% unique() %>% unlist() -> nonextreme_ids
+  anomaly_df %>% filter(diff_rain>anomaly_upper & country %in% c("PER3", "PER")) %>% select(id) %>% unique() %>% unlist() -> anomalous_ids
+  anomaly_df %>% filter(diff_rain<=anomaly_lower) %>% select(id) %>% unique() %>% unlist() -> nonanomalous_ids
   anomaly_df %>% filter(diff_rain<anomaly_upper & diff_rain>=anomaly_lower) %>% select(id) %>% unique() %>% unlist() -> buffer_ids  
   
   
-  # override extreme precip districts if manually provided 
+  # override anomalous precip districts if manually provided 
   if(length(treated_names)>0){
-    extreme_ids <- treated_names 
+    anomalous_ids <- treated_names 
   }
     
   # read in climate dataframe for matching
@@ -637,10 +638,10 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .007,
     filter(!is.na(rain)) %>%
     filter(id %in% coastal_dist_set) %>%
     filter(id %in% cases_2023_set) %>%
-    filter(id %in% c(extreme_ids, nonextreme_ids)) %>%
+    filter(id %in% c(anomalous_ids, nonanomalous_ids)) %>%
     # indicate post_cyclone observations
     mutate(date = as_date(date)) %>%
-    mutate(int = ifelse(date >= as_date("2023-03-07") & id %in% extreme_ids, 1, 0)) %>%
+    mutate(int = ifelse(date >= as_date("2023-03-07") & id %in% anomalous_ids, 1, 0)) %>%
     mutate(week = epiweek(date), year = year(date)) %>%
     filter(year >= 2018) # match from 2018 onward
   
@@ -678,16 +679,16 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .007,
     mutate(mean_rain = mean_rain * 1000) %>%
     # format for matching package
     transform(place = as.integer(as.factor(id))) %>%
-    mutate(is_control = ifelse(id %in% extreme_ids, "Extreme Precipitation", "Non-extreme Precipitation"))
+    mutate(is_control = ifelse(id %in% anomalous_ids, "Anomalous Precipitation", "Non-anomalous Precipitation"))
   
   # how many steps to match on
-  lag_num <- nrow(filter(clim_df, is_control == "Extreme Precipitation" & int==0) %>%
+  lag_num <- nrow(filter(clim_df, is_control == "Anomalous Precipitation" & int==0) %>%
                     select(step) %>%
                     distinct())
   
   cyclone_step <- lag_num+1
   
-  # do not conduct any matching, just compare extreme precip vs non-extreme precip units
+  # do not conduct any matching, just compare anomalous precip vs non-anomalous precip units
   unmatch_res <- PanelMatch(lag = lag_num, time.id = "step", unit.id = "place",
                             treatment = "int", refinement.method = "none",
                             data = clim_df, match.missing =FALSE,
@@ -696,7 +697,7 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .007,
                             covs.formula = ~ mean_temp + mean_rain,
                             outcome.var = "mean_rain")
   
-  # conduct matching for each of the extreme precip units
+  # conduct matching for each of the anomalous precip units
   match_res <- PanelMatch(lag = lag_num, time.id = "step", unit.id = "place",
                           treatment = "int", refinement.method = "mahalanobis",
                           data = clim_df, match.missing =FALSE,
@@ -735,12 +736,12 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .007,
   # label which units are in the matched control
   match_df %<>% mutate(is_control = ifelse(id %in% matched_names, "Matched Control", is_control)) 
   
-  # table comparing covariate means in extreme precip, non-extreme precip, and matched control
+  # table comparing covariate means in anomalous precip, non-anomalous precip, and matched control
   match_tab <-   match_df %>%
     filter(is_control == "Matched Control") %>%
-    mutate(is_control = "Non-extreme Precipitation",
+    mutate(is_control = "Non-anomalous Precipitation",
            weight = 1) %>%
-    rbind(match_df) %>% # we need to also have the matched control units counted in the non-extreme precip pool
+    rbind(match_df) %>% # we need to also have the matched control units counted in the non-anomalous precip pool
     group_by(is_control) %>%
     # weighted averages and standard deviations
     dplyr::summarize(`Mean Temp.` = paste0(mean(mean_temp), " (", weighted.mean(mean_temp, weight), ")"), 
@@ -750,7 +751,7 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .007,
                      n = length(unique(id)))  
   
   # names of treated units
-  treated_names <- filter(match_df, is_control == "Extreme Precipitation") %>%
+  treated_names <- filter(match_df, is_control == "Anomalous Precipitation") %>%
     select(id) %>% 
     unlist() %>%
     unique()
@@ -813,8 +814,8 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .007,
 #         years: the years over which climate data is provided 
 #         year_ind: the indices for when a new year starts 
 #         cyclone_step: index when cyclone occurred 
-#         pop: full population size of the extreme precip districts 
-#         pop.weights: population weights for the extreme precip districts (in the order of gsynth_out$tr)
+#         pop: full population size of the anomalous precip districts 
+#         pop.weights: population weights for the anomalous precip districts (in the order of gsynth_out$tr)
 synth_fun <- function(case_df, match_out, pop_df, file_prefix, 
                       att_plot = FALSE,
                       spatt_plot = FALSE, map = NULL,
@@ -866,6 +867,7 @@ synth_fun <- function(case_df, match_out, pop_df, file_prefix,
       filter(! year %in% exclude_year) %>%
       filter(week <= end_week) %>%
       filter(year <= 2023)
+    
   } else{
     # still read in the climate covariates even though we won't use them to make sure the same districts are studied
     # read in climate
@@ -941,7 +943,7 @@ synth_fun <- function(case_df, match_out, pop_df, file_prefix,
            inc = ifelse(is.na(inc) | is.infinite(inc), 0, inc)) %>%
     mutate(int = ifelse(id %in% match_out$treated_names & step >= cyclone_step, 1, 0),
            weight = 1) %>%
-    left_join(., match_out$df %>% select(id, is_control) %>% distinct() %>% filter(is_control %in% c("Extreme Precipitation", "Matched Control"))) 
+    left_join(., match_out$df %>% select(id, is_control) %>% distinct() %>% filter(is_control %in% c("Anomalous Precipitation", "Matched Control"))) 
   
   tr_pop <- df %>% filter(int==1 & year==2023) %>% select(pop, id) %>% distinct() %>% filter(!is.na(pop)) %>% select(pop) %>% sum()
   
