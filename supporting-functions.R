@@ -460,7 +460,9 @@ att_print <- function(gsynth_out, case_df, cyclone_step,
 # Note that this script would need to be modified to apply to countries other than Peru
 # because the facet labels are specified to match districts back to Peruvian regions
 #
-# Inputs: gsynth_out: gsynth object (can access by running fect or calling the $gsynth_out entry from synth_fun)
+# Note too that I further moved things around in PowerPoint bc I got tired of wrestling with ggplot
+#
+# Inputs: gsynth_out: gsynth object (can access by running fect or calling the $gsynth_obj entry from synth_fun)
 #         map: shapefile of spatial units at level used for analysis
 #         big_map: shapefile of spatial units at higher administrative division to indicate borders
 #         file_prefix: prefix to save pdf image
@@ -469,7 +471,7 @@ att_print <- function(gsynth_out, case_df, cyclone_step,
 # Output: a pdf figure in the figs folder with suffix spatt-map
 
 spatt_plot <- function(gsynth_out, map, big_map, file_prefix,
-                       tr_ind=c("3", "4", "5", "6", "7", "8", "9", "10")){
+                       tr_ind=c("2", "3", "4", "5")){
   
   time_ind <- which(rownames(gsynth_out$est.att) %in% tr_ind)
   
@@ -478,20 +480,32 @@ spatt_plot <- function(gsynth_out, map, big_map, file_prefix,
   att_pc_df <- gsynth_out$eff[time_ind, gsynth_out$tr] %>%
     colSums(na.rm=TRUE) %>%
     data.frame(att = .,
-               id = gsynth_out$id[gsynth_out$tr]) 
-    mutate(att_pc = att * 1000) 
+               id = gsynth_out$id[gsynth_out$tr]) %>%
+    mutate(att_pc = att * 1000) %>%
+    mutate(att_pc_bin = case_when(att_pc <= -5 ~ "< -5",
+                                  att_pc > -5 & att_pc < 0 ~ "-5 to 0", 
+                                  att_pc > 0 & att_pc <= 5 ~ "0 to 5", 
+                                  att_pc > 5 & att_pc <= 10 ~ "5 to 10", 
+                                  att_pc > 10 & att_pc <= 15 ~ "10 to 15", 
+                                  att_pc > 15 & att_pc <= 20 ~ "15 to 20", 
+                                  att_pc > 20 & att_pc <= 25 ~ "20 to 25", 
+                                  att_pc > 25 & att_pc <= 30 ~ "25 to 30", 
+                                  att_pc > 30 ~ "> 30"))
   
   spatt_map <- merge(map, att_pc_df) %>% # append to map of districts
-    rename(`Attributable Cases \n(per Thousand)` = att_pc)  %>%
+    rename(`Attributable Cases (per Thousand)` = att_pc_bin)  %>%
     ggplot()+
-    geom_sf(aes(fill=`Attributable Cases \n(per Thousand)`), color="black", lwd=.3)+
+    geom_sf(aes(fill=`Attributable Cases (per Thousand)`), color="black", lwd=.3)+
     geom_sf(data=big_map, fill=NA, color="black", lwd=.8)+ # add big_map borders
-    scale_fill_stepsn(colours=c("#7E64C5", "#FFFFFF", "#FF7F7F", "#FF0000", "#BA0007", "#75000E", "#5B000B", "#420008", "#73000E", "black"),
-                      breaks=c(-5, 0, 5, 10, 15, 20, 25, 30),
-                      labels=c("", 0, "", 10, "", 20, "", ">30"))+ #colors specified for main analysis, may wish to modify breaks for a different mode
+    scale_fill_manual(values=c("#7E64C5", "#E6CCFF", "#FFCCCC", "#FF9999", "#FF6666", "#FF3333", "#FF0000", "#A10004", "#420008"),
+                      breaks=c("< -5", "-5 to 0", "0 to 5" , "5 to 10", "10 to 15", "15 to 20", "20 to 25", "25 to 30", "> 30"),
+                      labels=c("", "0", "", "10", "", "20", "", ">30", ""))+ #colors specified for main analysis, may wish to modify breaks for a different mode
     ylim(c(-9, -3))+
     xlim(c(-82, -77))+
     theme_void()+
+    guides(fill=guide_legend(nrow=1,
+                             title.position = "top",
+                             label.position = "bottom"))+
     theme(legend.position="bottom")
   
   # begin processing for the time series plots
@@ -540,14 +554,14 @@ spatt_plot <- function(gsynth_out, map, big_map, file_prefix,
     theme(legend.position="none")+
     scale_x_date(date_breaks = "2 months", date_labels = "%b")+ # make the x-axis (time) nice
     geom_hline(yintercept=0, color="maroon", linetype="dashed")+ # indicate zero attributable cases
-    scale_y_continuous(limits=c(-10, 50)) # may need to change this if not plotting main analysis
+    scale_y_continuous(limits=c(-5, 60)) # may need to change this if not plotting main analysis
   
   plot_grid(spatt_scatter)
   ggsave(paste0("figs/", file_prefix, "-spatt-scatter.pdf"), height=6, width=8, units="in", dpi=700)
   
   plot_grid(spatt_map, spatt_scatter, ncol = 2, labels="AUTO") # combine both plots into a grid
   
-  ggsave(paste0("figs/", file_prefix, "-spatt-map.png"), height=6, width=8, units="in", dpi=700)
+  ggsave(paste0("figs/", file_prefix, "-spatt-map.pdf"), height=6, width=8, units="in", dpi=700)
   
   
 }

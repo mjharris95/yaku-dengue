@@ -256,6 +256,49 @@ match_out_allper$table
 synth_out_allper$gsynth_obj$est.att %>% 
   tail(10)
 
+# Time series: raw inc over time in anomalous vs non-anomalous precip 
+group_pop <- rbind(pop_df %>%
+                      filter(id %in% match_out_allper$treated_names) %>%
+                      mutate(group = "Anomalous Precip."),
+                  pop_df %>%
+                      filter(id %in% match_out_allper$match_names) %>%
+                      mutate(group = "Matched Control"), 
+                  pop_df %>% 
+                      filter(id %in% setdiff(cases_2023, match_out_allper$treated_names)) %>%
+                      mutate(group = "Non-anomalous Precip.")) %>%
+              group_by(year, group) %>%
+              summarize(pop = sum(pop, na.rm=TRUE))
+  
+
+case_df_weekly <- case_df %>%
+  mutate(date = ymd(paste(year, 1, 1, sep = "-")) + weeks(week - 1)) %>% 
+  filter(year >= 2016)
+
+rbind(case_df_weekly %>%
+        filter(id %in% match_out_allper$treated_names) %>%
+        mutate(group = "Anomalous Precip."),
+      case_df_weekly %>%
+        filter(id %in% match_out_allper$match_names) %>%
+        mutate(group = "Matched Control"), 
+      case_df_weekly %>% 
+        filter(id %in% setdiff(cases_2023, match_out_allper$treated_names)) %>%
+        mutate(group = "Non-anomalous Precip.")) %>%
+  group_by(date, group) %>%
+  summarize(cases = sum(cases)) %>%
+  left_join(group_pop) %>%
+  mutate(incidence = cases/pop*1000) %>%
+ggplot()+
+  geom_line(aes(x=date, y = incidence, group=group, color=group), lwd=1)+
+  ylab("Incidence (cases per thousand people)") +
+  xlab("Time (years)")+
+  scale_color_manual("",
+                     breaks = c("Anomalous Precip.", "Matched Control", "Non-anomalous Precip."),
+                     values = c("#581845", "#6FC0DB", "#FFC300"))+
+  theme_classic()+
+  theme(legend.position="bottom")+
+  geom_vline(aes(xintercept=as_date("2023-03-07")), lty="dashed", color="red")
+ggsave(paste0("figs/raw-inc.pdf"), height=11, width=11, units="cm")
+
 # Examine values: construct table
 synth_out_allper$gsynth_obj$est.att %>% 
   tail(13) %>%
@@ -912,9 +955,13 @@ synth_out_adm1 <- synth_fun(case_df_adm1, match_out_adm1,
 
 #### ANALYSIS FOR PART 2: SOCIOVULNERABILITY INDICES BEGINS HERE
 # would recommend detaching other packages due to interference between dplyr and terra select
+library(tidyverse)
 library(raster)
+library(sf)
 library(terra)
 library(psych)
+library(reshape2)
+library(colorspace)
 
 # read in shapefile of districts
 per_map<-read_sf("maps/CDC_Distritos.shp") %>%
@@ -1000,7 +1047,7 @@ for(file in files[startsWith(files, "r_")]){
   
   
   # this loop takes a while to run, save each step
-  save(covar_df, file="covar_df.RData")
+  #save(covar_df, file="covar_df.RData")
 }
 
 
@@ -1014,6 +1061,48 @@ covar_df %<>%
   filter(id %in% match_out_allper$treated_names)
 
 set.seed(0514)
+
+#plot correlations between indices
+covar_df %>% 
+  select(-"id") %>%
+  cor() %>%
+  reshape2::melt() %>%
+  mutate(Var1 = recode(Var1, 
+                      "rain" = "Precipitation", 
+                      "vui" = "Flood susceptibility",
+                      "socio_vpr" = "Low-quality walls",
+                      "socio_vtc" = "Low-quality roofs",
+                      "temp" = "Temperature",
+                      "socio_vps" = "Low-quality floors",
+                      "socio_vtp" = "Low-quality housing",
+                      "socio_acc" = "Nonpublic \nwater source",
+                      "hidro" = "Distance to \nwater",
+                      "socio_arg" = "Inconsistent \nwater access",
+                      "socio_vhc" = "Household overcrowding", 
+                      "vias" = "Distance to \n roads"),
+         Var2 =  recode(Var2, 
+                        "rain" = "Precipitation", 
+                        "vui" = "Flood susceptibility",
+                        "socio_vpr" = "Low-quality walls",
+                        "socio_vtc" = "Low-quality roofs",
+                        "temp" = "Temperature",
+                        "socio_vps" = "Low-quality floors",
+                        "socio_vtp" = "Low-quality housing",
+                        "socio_acc" = "Nonpublic \nwater source",
+                        "hidro" = "Distance to \nwater",
+                        "socio_arg" = "Inconsistent \nwater access",
+                        "socio_vhc" = "Household overcrowding", 
+                        "vias" = "Distance to \n roads")) %>%
+  mutate(value = ifelse(value==1, NA, value)) %>%
+  rename(Correlation = value) %>%
+  ggplot(aes(x=Var1, y=Var2, fill=Correlation)) +
+    geom_tile()+
+    xlab("")+
+    ylab("")+
+    scale_fill_binned_diverging(breaks=seq(from=-1, to=1, by=.25), p1=2)+
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+ggsave(paste0("figs/covar-cor.pdf"), height=20, width=20, units="cm")
 
 # pivot wider - format for pca package
 covar_df %<>%
@@ -1030,13 +1119,13 @@ covar_df <- read.csv("anomaly_df.csv") %>%
 
 # determine number of factors to use based on vss
 covar_df %>% 
-  dplyr::select(-c(id, socio_vtp)) %>%
+  dplyr::select(-c(id)) %>%
   vss(n=8, rotate="varimax", fm="mle")
 
 # run pca, store results
 covar_df %>% 
-  dplyr::select(-c(id, socio_vtp)) %>%
-  principal(nfactors=4, rotate="varimax", scores=TRUE) -> pca_res
+  dplyr::select(-c(id)) %>%
+  principal(nfactors=2, rotate="varimax", scores=TRUE) -> pca_res
 
 # extract labels for main variables in each rotated components,
 # use this to understand rotated components & helper for plotting
@@ -1045,7 +1134,6 @@ RC_labs <- pca_res$loadings %>%
   as.data.frame %>% 
   rownames_to_column() %>% 
   pivot_longer(starts_with("RC")) %>% 
-  filter(abs(value) > 0.7) %>% 
   # make this into the correct variable names
   mutate(lab = recode(rowname, 
                       "rain" = "Precipitation", 
@@ -1061,7 +1149,8 @@ RC_labs <- pca_res$loadings %>%
   group_by(name) %>% 
   arrange(name, desc(abs(value))) %>% 
   summarise(lab = paste(lab, collapse = "\n")) %>% 
-  mutate(xval = as.numeric(gsub("RC", "", name)))
+  mutate(xval = as.numeric(gsub("RC", "", name))) 
+
 
 
 # add RC values to dataframe
@@ -1070,7 +1159,7 @@ pca_res$scores %>%
   cbind(covar_df, .) -> covar_df
 
 # extract attributable incidence in each district across the post-cyclone period (April 22 - Nov 3)
-eff_ind <- which(rownames(synth_out_allper$gsynth_obj$est.att) %in% c("3", "4", "5", "6", "7", "8", "9"))
+eff_ind <- which(rownames(synth_out_allper$gsynth_obj$est.att) %in% c("2", "3", "4", "5"))
 
 sapply(covar_df$id, function(dist_id) synth_out_allper$gsynth_obj$eff[eff_ind, which(synth_out_allper$gsynth_obj$id==dist_id)] %>% sum()) %>%
   data.frame(ATT = .,
