@@ -953,15 +953,18 @@ synth_out_adm1 <- synth_fun(case_df_adm1, match_out_adm1,
                             start_year = 2018, end_week=28, inc=TRUE)
 
 
-#### ANALYSIS FOR PART 2: SOCIOVULNERABILITY INDICES BEGINS HERE
+#### ANALYSIS FOR PART 2: SOCIOVULNERABILITY INDICES BEGINS HERE ####
 # would recommend detaching other packages due to interference between dplyr and terra select
 library(tidyverse)
+library(magrittr)
 library(raster)
 library(sf)
 library(terra)
 library(psych)
 library(reshape2)
 library(colorspace)
+library(cowplot)
+library(xtable)
 
 # read in shapefile of districts
 per_map<-read_sf("maps/CDC_Distritos.shp") %>%
@@ -1062,24 +1065,38 @@ covar_df %<>%
 
 set.seed(0514)
 
+# pivot wider - format for pca package
+covar_df %<>%
+  distinct() %>%
+  dplyr::select(c(id, avg_socio, var_name)) %>%
+  pivot_wider(names_from=var_name, values_from=avg_socio) %>%
+  distinct() 
+
+# append weather information during Cyclone Yaku
+covar_df <- read.csv("anomaly_df.csv") %>%
+  dplyr::select(id, temp, rain) %>%
+  right_join(covar_df) %>%
+  filter(!is.nan(vui))
+
+
 #plot correlations between indices
 covar_df %>% 
-  select(-"id") %>%
+  dplyr::select(-"id") %>%
   cor() %>%
   reshape2::melt() %>%
   mutate(Var1 = recode(Var1, 
-                      "rain" = "Precipitation", 
-                      "vui" = "Flood susceptibility",
-                      "socio_vpr" = "Low-quality walls",
-                      "socio_vtc" = "Low-quality roofs",
-                      "temp" = "Temperature",
-                      "socio_vps" = "Low-quality floors",
-                      "socio_vtp" = "Low-quality housing",
-                      "socio_acc" = "Nonpublic \nwater source",
-                      "hidro" = "Distance to \nwater",
-                      "socio_arg" = "Inconsistent \nwater access",
-                      "socio_vhc" = "Household overcrowding", 
-                      "vias" = "Distance to \n roads"),
+                       "rain" = "Precipitation", 
+                       "vui" = "Flood susceptibility",
+                       "socio_vpr" = "Low-quality walls",
+                       "socio_vtc" = "Low-quality roofs",
+                       "temp" = "Temperature",
+                       "socio_vps" = "Low-quality floors",
+                       "socio_vtp" = "Low-quality housing",
+                       "socio_acc" = "Nonpublic \nwater source",
+                       "hidro" = "Distance to \nwater",
+                       "socio_arg" = "Inconsistent \nwater access",
+                       "socio_vhc" = "Household overcrowding", 
+                       "vias" = "Distance to \n roads"),
          Var2 =  recode(Var2, 
                         "rain" = "Precipitation", 
                         "vui" = "Flood susceptibility",
@@ -1096,26 +1113,13 @@ covar_df %>%
   mutate(value = ifelse(value==1, NA, value)) %>%
   rename(Correlation = value) %>%
   ggplot(aes(x=Var1, y=Var2, fill=Correlation)) +
-    geom_tile()+
-    xlab("")+
-    ylab("")+
-    scale_fill_binned_diverging(breaks=seq(from=-1, to=1, by=.25), p1=2)+
-    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  geom_tile()+
+  xlab("")+
+  ylab("")+
+  scale_fill_binned_diverging(breaks=seq(from=-1, to=1, by=.25), p1=2)+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
 ggsave(paste0("figs/covar-cor.pdf"), height=20, width=20, units="cm")
-
-# pivot wider - format for pca package
-covar_df %<>%
-  distinct() %>%
-  dplyr::select(c(id, avg_socio, var_name)) %>%
-  pivot_wider(names_from=var_name, values_from=avg_socio) %>%
-  distinct()
-
-# append weather information during Cyclone Yaku
-covar_df <- read.csv("anomaly_df.csv") %>%
-  dplyr::select(id, temp, rain) %>%
-  right_join(covar_df) %>%
-  filter(!is.nan(vui))
 
 # determine number of factors to use based on vss
 covar_df %>% 
@@ -1127,6 +1131,33 @@ covar_df %>%
   dplyr::select(-c(id)) %>%
   principal(nfactors=2, rotate="varimax", scores=TRUE) -> pca_res
 
+# make a table of factor loadings
+pca_res$loadings %>% 
+  unclass %>% 
+  as.data.frame %>% 
+  rownames_to_column() %>%
+  mutate(rowname = recode(rowname, 
+        "rain" = "Precipitation", 
+        "vui" = "Flood susceptibility",
+        "socio_vpr" = "Low-quality walls",
+        "socio_vtc" = "Low-quality roofs",
+        "temp" = "Temperature",
+        "socio_vps" = "Low-quality floors",
+        "socio_vtp" = "Low-quality housing",
+        "socio_acc" = "Nonpublic water source",
+        "hidro" = "Distance to water",
+        "socio_arg" = "Inconsistent water access",
+        "socio_vhc" = "Household overcrowding", 
+        "vias" = "Distance to roads")) %>%
+  rename(" " = rowname) %>%
+  arrange(desc(RC1)) %>%
+  mutate(RC1 = round(RC1, digits=2),
+         RC2 = round(RC2, digits=2)) %>%
+  mutate(RC1 = ifelse(abs(RC1)>= .6, paste0("textbf{", RC1, "}"), RC1),
+         RC2 = ifelse(abs(RC2)>= .6, paste0("textbf{", RC2, "}"), RC2)) %>%
+  xtable(., type = "latex", row.names=FALSE) %>%
+  print(file = "figs/rc-loadings.tex", include.rownames=FALSE)
+
 # extract labels for main variables in each rotated components,
 # use this to understand rotated components & helper for plotting
 RC_labs <- pca_res$loadings %>% 
@@ -1134,6 +1165,8 @@ RC_labs <- pca_res$loadings %>%
   as.data.frame %>% 
   rownames_to_column() %>% 
   pivot_longer(starts_with("RC")) %>% 
+  group_by(name) %>%
+  slice_max(abs(value), n=2) %>%
   # make this into the correct variable names
   mutate(lab = recode(rowname, 
                       "rain" = "Precipitation", 
@@ -1145,20 +1178,18 @@ RC_labs <- pca_res$loadings %>%
                       "socio_vtp" = "Low-quality housing",
                       "socio_acc" = "Nonpublic \nwater source")) %>%
   mutate(lab = paste0( #ifelse(value < 0, "- ", "+ "), 
-    lab, " (",  round(value, 2), ")")) %>% 
+    lab, " (",  sprintf("%.2f", round(value, 2)), ")")) %>% 
   group_by(name) %>% 
   arrange(name, desc(abs(value))) %>% 
   summarise(lab = paste(lab, collapse = "\n")) %>% 
   mutate(xval = as.numeric(gsub("RC", "", name))) 
-
-
 
 # add RC values to dataframe
 pca_res$scores %>%
   data.frame() %>%
   cbind(covar_df, .) -> covar_df
 
-# extract attributable incidence in each district across the post-cyclone period (April 22 - Nov 3)
+# extract attributable incidence in each district across the post-cyclone period (March 25 - July 14)
 eff_ind <- which(rownames(synth_out_allper$gsynth_obj$est.att) %in% c("2", "3", "4", "5"))
 
 sapply(covar_df$id, function(dist_id) synth_out_allper$gsynth_obj$eff[eff_ind, which(synth_out_allper$gsynth_obj$id==dist_id)] %>% sum()) %>%
@@ -1167,7 +1198,7 @@ sapply(covar_df$id, function(dist_id) synth_out_allper$gsynth_obj$eff[eff_ind, w
   right_join(covar_df) -> covar_df
 
 # fit regression 
-mod.res <- lm(ATT~RC1+RC2+RC3+RC4, data=covar_df)
+mod.res <- lm(ATT~RC1+RC2, data=covar_df)
 mod <- mod.res$coefficients
 
 # get the bootstrapped attributable incidence estimates from the generalized synthetic control
@@ -1185,16 +1216,14 @@ boot_vals <- lapply(covar_df$id, function(id)
 # our regression isn't biased toward a particular district
 boot_sample <-  boot_vals %>%
   group_by(id) %>%
-  slice_sample(n=609) %>%
+  slice_sample(n=611) %>%
   ungroup()
 
-
-#### IMPORTANT: THESE NEED TO BE UPDATED
 # for each bootstrap, refit the model and store the coefficients 
 # here, we're resampling across both anomalous precip districts and their bootstrapped estimates
-suppressWarnings(boot_mod <- lapply(1:1000, function(i) slice_sample(boot_sample, n=55, replace=TRUE) %>%
+suppressWarnings(boot_mod <- lapply(1:1000, function(i) slice_sample(boot_sample, n=48, replace=TRUE) %>%
                                       left_join(., covar_df %>% dplyr::select(-ATT), by="id") %>%
-                                      lm(ATT~RC1+RC2+RC3+RC4, data=.)  %>% 
+                                      lm(ATT~RC1+RC2, data=.)  %>% 
                                       summary() %>% 
                                       coef() %>% 
                                       data.frame() %>%
@@ -1215,7 +1244,7 @@ suppressWarnings(boot_mod <- lapply(1:1000, function(i) slice_sample(boot_sample
 # rename y-intercept variable (which confusingly get called x-intercept because of how R default names columns)
 boot_mod$var <-  ifelse(boot_mod$var == "X.Intercept.", "Intercept", boot_mod$var)
 
-RC_labs$y <- c(20, 10, 20, 10)
+RC_labs$y <- c(20, 20)
 
 # plot the relationship between the RCs and attributable incidence
 p1 <- boot_mod %>%
