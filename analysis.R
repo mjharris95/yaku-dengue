@@ -75,12 +75,12 @@ map3 <- read_sf("maps/CDC_Distritos.shp") %>%
 
 map3 %>%  filter(country=="PER3") %>%
   filter(diff_rain > .0085 & id %in% cases_2023) %>%
-  summarise(id = "anomalous") -> anomalous_map3 # treated districts most heavily impacted by anomalous precip
+  summarise(id = "extreme") -> extreme_map3 # treated districts most heavily impacted by extreme precip
 
 # merge data and plot for adm1
 p2a <- ggplot() + 
-  geom_sf(data=map3, aes(fill=diff_rain*1000)) +
-  geom_sf(data = anomalous_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of anomalous precip districts
+  geom_sf(data=map3, aes(fill=diff_rain*1000), col=NA) +
+  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of extreme precip districts
   scale_fill_viridis("Precipitation Anomaly (mm/day)", option="H")+
   theme_void()+
   theme(legend.position="bottom")+
@@ -88,26 +88,24 @@ p2a <- ggplot() +
                                 barwidth=11))
 
 p2b <- ggplot() + 
-  geom_sf(data=map3, aes(fill=mean_rain*1000)) +
-  geom_sf(data = anomalous_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of anomalous precip districts
+  geom_sf(data=map3, aes(fill=mean_rain*1000), col=NA) +
+  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of extreme precip districts
   scale_fill_viridis("Historic Precipitation (mm/day)", option="viridis", 
                      direction = -1)+
   theme_void()+
   theme(legend.position="bottom")+
-  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5,
-                                barwidth=11))
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5, barwidth=11))
 
 p2c <- ggplot()+
-  geom_sf(data=map3, aes(fill=mean_temp)) +
-  geom_sf(data = anomalous_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of anomalous precip districts
+  geom_sf(data=map3, aes(fill=mean_temp),col=NA) +
+  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of extreme precip districts
   scale_fill_viridis("Historic Temperature (C)", option="plasma", breaks=c(5, 10, 15, 20, 25))+
   theme_void()+
   theme(legend.position="bottom")+
-  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5,
-                                barwidth=11))
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5, barwidth=11))
 
 plot_grid(p2a, p2b, p2c, nrow=1, labels="AUTO")
-ggsave("figs/climate_map.pdf", height=4, width=8, units="in")
+ggsave("figs/climate_map.pdf", height=4, width=12, units="in")
 ggsave("figs/climate_map.png", dpi=320, height=4, width=8, units="in")
 
 # plot temperature-dependent R0 curve
@@ -143,7 +141,7 @@ fread("march-clim_df.csv") %>%
     pctile > .95 ~ "> 95th",
     pctile > .90 ~ "> 90th",
     pctile >= .84 ~ ">= 84th",
-    pctile < .84 ~ "Non-anomalous (< 84th)"
+    pctile < .84 ~ "Non-extreme (< 84th)"
   )) %>%
   rename(DEPARTAMEN = id) %>%
   # append to Peru map 
@@ -153,7 +151,7 @@ fread("march-clim_df.csv") %>%
   geom_sf(aes(fill=pctile_dis))+
   scale_fill_manual("Percentile",
                     values=c("white", "#ffa590", "#ff4122", "#c61a09"),
-                    breaks=c("Non-anomalous (< 84th)", ">= 84th", "> 90th", "> 95th"))+
+                    breaks=c("Non-extreme (< 84th)", ">= 84th", "> 90th", "> 95th"))+
   theme_void()
 
 ggsave("figs/pctile-anomaly.pdf", height=4, width=4, units="in")
@@ -256,16 +254,16 @@ match_out_allper$table
 synth_out_allper$gsynth_obj$est.att %>% 
   tail(10)
 
-# Time series: raw inc over time in anomalous vs non-anomalous precip 
+# Time series: raw inc over time in extreme vs non-extreme precip 
 group_pop <- rbind(pop_df %>%
                       filter(id %in% match_out_allper$treated_names) %>%
-                      mutate(group = "Anomalous Precip."),
+                      mutate(group = "Extreme Precip."),
                   pop_df %>%
                       filter(id %in% match_out_allper$match_names) %>%
                       mutate(group = "Matched Control"), 
                   pop_df %>% 
                       filter(id %in% setdiff(cases_2023, match_out_allper$treated_names)) %>%
-                      mutate(group = "Non-anomalous Precip.")) %>%
+                      mutate(group = "Non-extreme Precip.")) %>%
               group_by(year, group) %>%
               summarize(pop = sum(pop, na.rm=TRUE))
   
@@ -276,27 +274,28 @@ case_df_weekly <- case_df %>%
 
 rbind(case_df_weekly %>%
         filter(id %in% match_out_allper$treated_names) %>%
-        mutate(group = "Anomalous Precip."),
+        mutate(group = "Extreme Precip."),
       case_df_weekly %>%
         filter(id %in% match_out_allper$match_names) %>%
         mutate(group = "Matched Control"), 
       case_df_weekly %>% 
         filter(id %in% setdiff(cases_2023, match_out_allper$treated_names)) %>%
-        mutate(group = "Non-anomalous Precip.")) %>%
+        mutate(group = "Non-extreme Precip.")) %>%
   group_by(date, group) %>%
   summarize(cases = sum(cases)) %>%
   left_join(group_pop) %>%
   mutate(incidence = cases/pop*1000) %>%
 ggplot()+
-  geom_line(aes(x=date, y = incidence, group=group, color=group), lwd=1)+
+  geom_line(aes(x=date, y = incidence, group=group, color=group), lwd=.5, alpha=.6)+
   ylab("Incidence (cases per thousand people)") +
   xlab("Time (years)")+
   scale_color_manual("",
-                     breaks = c("Anomalous Precip.", "Matched Control", "Non-anomalous Precip."),
+                     breaks = c("Extreme Precip.", "Matched Control", "Non-extreme Precip."),
                      values = c("#581845", "#6FC0DB", "#FFC300"))+
   theme_classic()+
   theme(legend.position="bottom")+
-  geom_vline(aes(xintercept=as_date("2023-03-07")), lty="dashed", color="red")
+  geom_vline(aes(xintercept=as_date("2023-03-07")), lty="dashed", color="red")+
+  guides(color = guide_legend(nrow = 2))
 ggsave(paste0("figs/raw-inc.pdf"), height=11, width=11, units="cm")
 
 # Examine values: construct table
@@ -625,7 +624,7 @@ anom_p2 <-  anomvar_df %>%
   ggplot(aes(x=anomaly_upper, color=anomaly_lower)) + 
   geom_pointrange(aes(y=att.est*100, ymin=att.lower*100, ymax=att.upper*100),
                   stat="identity", position = position_dodge2(width = .2))+
-  xlab("Precip. Anomaly (Anomalous Threshold)")+
+  xlab("Precip. Anomaly (Extreme Threshold)")+
   ylab("Attributable \nCases (%)")+
   theme_classic()+
   scale_color_viridis_d("Precip. Anomaly (Control Threshold)", direction=-1)+
@@ -648,7 +647,7 @@ anom_p31 <- anomvar_df %>%
 anom_p32 <- anomvar_df %>%
   ggplot() + 
   geom_bar(aes(x=anomaly_upper, y=ntreated, fill=anomaly_lower), stat="identity", position="dodge")+
-  ggtitle("Anomalous")+
+  ggtitle("Extreme")+
   theme_classic()+
   theme(legend.position="none",  plot.title = element_text(size = 12))+
   scale_fill_viridis_d("Precip. Anomaly (Control Threshold)", direction=-1)+
@@ -709,7 +708,7 @@ for(i in 1:3){
     i <- 4
     match_num <- "All"
     # edit the match_out dataframe to include everything in the control pool
-    match_mn$match_names <- filter(match_mn$df, is_control %in% c("Non-anomalous Precipitation", "Matched Control")) %>%
+    match_mn$match_names <- filter(match_mn$df, is_control %in% c("Non-extreme Precipitation", "Matched Control")) %>%
       select(id) %>%
       unique() %>% 
       unlist()
@@ -801,7 +800,7 @@ mn_p31 <- mnvar_df %>%
 mn_p32 <- mnvar_df %>%
   ggplot() + 
   geom_bar(aes(x=match_num, y=ntreated), stat="identity")+
-  ggtitle("Anomalous Precipitation")+
+  ggtitle("Extreme Precipitation")+
   theme_classic()+
   theme(legend.position="none",  plot.title = element_text(size = 12))+
   ylab("n")+
@@ -940,7 +939,7 @@ match_out_adm1 <- match_fun(anomaly_upper = .007, anomaly_lower = NA,
                             my_country = c("PER", "COL1", "ECU1", "MEX", "BRA1"), 
                             plot_bal=FALSE, plot_map=FALSE, file_prefix="adm1",
                             map=five_map, big_map=country_bounds,
-                            treated_names = anomalous_adm1)
+                            treated_names = extreme_adm1)
 
 pop_df_adm1 <- expand_grid(id=c(match_out_adm1$match_names, match_out_adm1$treated_names),
                            year = 2018:2023)  %>% 
@@ -1059,7 +1058,7 @@ load("covar_df.RData")
 # load in the matching and gsynth results
 load("peru-main.RData")
 
-# filter covariates to the anomalous precip districts
+# filter covariates to the extreme precip districts
 covar_df %<>%
   filter(id %in% match_out_allper$treated_names)
 
@@ -1076,7 +1075,8 @@ covar_df %<>%
 covar_df <- read.csv("anomaly_df.csv") %>%
   dplyr::select(id, temp, rain) %>%
   right_join(covar_df) %>%
-  filter(!is.nan(vui))
+  filter(!is.nan(vui)) %>%
+  dplyr::select(-c(socio_vpr, socio_vps, socio_vtc))
 
 
 #plot correlations between indices
@@ -1129,7 +1129,7 @@ covar_df %>%
 # run pca, store results
 covar_df %>% 
   dplyr::select(-c(id)) %>%
-  principal(nfactors=2, rotate="varimax", scores=TRUE) -> pca_res
+  principal(nfactors=3, rotate="varimax", scores=TRUE) -> pca_res
 
 # make a table of factor loadings
 pca_res$loadings %>% 
@@ -1145,16 +1145,18 @@ pca_res$loadings %>%
         "socio_vps" = "Low-quality floors",
         "socio_vtp" = "Low-quality housing",
         "socio_acc" = "Nonpublic water source",
-        "hidro" = "Distance to water",
+        "hidro" = "Distance to \nbody of water",
         "socio_arg" = "Inconsistent water access",
         "socio_vhc" = "Household overcrowding", 
         "vias" = "Distance to roads")) %>%
   rename(" " = rowname) %>%
   arrange(desc(RC1)) %>%
   mutate(RC1 = round(RC1, digits=2),
-         RC2 = round(RC2, digits=2)) %>%
+         RC2 = round(RC2, digits=2),
+         RC3 = round(RC3, digits=3)) %>%
   mutate(RC1 = ifelse(abs(RC1)>= .6, paste0("textbf{", RC1, "}"), RC1),
-         RC2 = ifelse(abs(RC2)>= .6, paste0("textbf{", RC2, "}"), RC2)) %>%
+         RC2 = ifelse(abs(RC2)>= .6, paste0("textbf{", RC2, "}"), RC2),
+         RC3 = ifelse(abs(RC3)>= .6, paste0("textbf{", RC3, "}"), RC3)) %>%
   xtable(., type = "latex", row.names=FALSE) %>%
   print(file = "figs/rc-loadings.tex", include.rownames=FALSE)
 
@@ -1176,7 +1178,9 @@ RC_labs <- pca_res$loadings %>%
                       "temp" = "Temperature",
                       "socio_vps" = "Low-quality floors",
                       "socio_vtp" = "Low-quality housing",
-                      "socio_acc" = "Nonpublic \nwater source")) %>%
+                      "socio_acc" = "Nonpublic \nwater source",
+                      "socio_arg" = "Inconsistent \nwater access",
+                      "hidro" = "Distance to \nbody of water")) %>%
   mutate(lab = paste0( #ifelse(value < 0, "- ", "+ "), 
     lab, " (",  sprintf("%.2f", round(value, 2)), ")")) %>% 
   group_by(name) %>% 
@@ -1198,7 +1202,7 @@ sapply(covar_df$id, function(dist_id) synth_out_allper$gsynth_obj$eff[eff_ind, w
   right_join(covar_df) -> covar_df
 
 # fit regression 
-mod.res <- lm(ATT~RC1+RC2, data=covar_df)
+mod.res <- lm(ATT~RC1+RC2+RC3, data=covar_df)
 mod <- mod.res$coefficients
 
 # get the bootstrapped attributable incidence estimates from the generalized synthetic control
@@ -1220,10 +1224,10 @@ boot_sample <-  boot_vals %>%
   ungroup()
 
 # for each bootstrap, refit the model and store the coefficients 
-# here, we're resampling across both anomalous precip districts and their bootstrapped estimates
+# here, we're resampling across both extreme precip districts and their bootstrapped estimates
 suppressWarnings(boot_mod <- lapply(1:1000, function(i) slice_sample(boot_sample, n=48, replace=TRUE) %>%
                                       left_join(., covar_df %>% dplyr::select(-ATT), by="id") %>%
-                                      lm(ATT~RC1+RC2, data=.)  %>% 
+                                      lm(ATT~RC1+RC2+RC3, data=.)  %>% 
                                       summary() %>% 
                                       coef() %>% 
                                       data.frame() %>%
@@ -1244,7 +1248,7 @@ suppressWarnings(boot_mod <- lapply(1:1000, function(i) slice_sample(boot_sample
 # rename y-intercept variable (which confusingly get called x-intercept because of how R default names columns)
 boot_mod$var <-  ifelse(boot_mod$var == "X.Intercept.", "Intercept", boot_mod$var)
 
-RC_labs$y <- c(20, 20)
+RC_labs$y <- c(20, 20, 20)
 
 # plot the relationship between the RCs and attributable incidence
 p1 <- boot_mod %>%
