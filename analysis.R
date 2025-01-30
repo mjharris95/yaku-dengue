@@ -82,7 +82,7 @@ p2a <- ggplot() +
   geom_sf(data=map3, aes(fill=diff_rain*1000), col=NA) +
   geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of extreme precip districts
   scale_fill_viridis("Precipitation Anomaly (mm/day)", option="H")+
-  theme_void()+
+  theme_void() +
   theme(legend.position="bottom")+
   guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5,
                                 barwidth=11))
@@ -92,7 +92,7 @@ p2b <- ggplot() +
   geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of extreme precip districts
   scale_fill_viridis("Historic Precipitation (mm/day)", option="viridis", 
                      direction = -1)+
-  theme_void()+
+  theme_void() +
   theme(legend.position="bottom")+
   guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5, barwidth=11))
 
@@ -100,12 +100,12 @@ p2c <- ggplot()+
   geom_sf(data=map3, aes(fill=mean_temp),col=NA) +
   geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of extreme precip districts
   scale_fill_viridis("Historic Temperature (C)", option="plasma", breaks=c(5, 10, 15, 20, 25))+
-  theme_void()+
+  theme_void() +
   theme(legend.position="bottom")+
   guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5, barwidth=11))
 
-plot_grid(p2a, p2b, p2c, nrow=1, labels="AUTO")
-ggsave("figs/climate_map.pdf", height=4, width=12, units="in")
+plot_grid(p2a, p2b, p2c, nrow=1, labels="AUTO", rel_widths=c(1,1,1), align="h")
+ggsave("figs/climate_map.pdf", height=4, width=8, units="in")
 ggsave("figs/climate_map.png", dpi=320, height=4, width=8, units="in")
 
 # plot temperature-dependent R0 curve
