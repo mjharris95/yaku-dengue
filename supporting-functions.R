@@ -499,6 +499,7 @@ spatt_plot <- function(gsynth_out, map, big_map, file_prefix,
     ylim(c(-9, -3))+
     xlim(c(-82, -77))+
     theme_void()+
+    annotation_scale(style="ticks", pad_x= unit(0, "cm"))+
     theme(legend.position="bottom")+
     guides(fill = guide_colorbar(legend.direction= "horizontal",
                                title.position = "top", title.hjust=0.5,

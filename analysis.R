@@ -16,6 +16,7 @@ library(xtable)
 library(colorspace)
 library(psych)
 library(berryFunctions)
+library(ggspatial)
 set.seed(0514) # make sure to always set the seed so results are replicable
 source("supporting-functions.R")
 
@@ -84,6 +85,7 @@ p2a <- ggplot() +
   scale_fill_viridis("Precipitation Anomaly (mm/day)", option="H")+
   theme_void() +
   theme(legend.position="bottom")+
+  annotation_scale(style="ticks", pad_x= unit(0, "cm"))+
   guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5,
                                 barwidth=11))
 

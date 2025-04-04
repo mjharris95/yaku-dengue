@@ -124,3 +124,5 @@ adm3-allper_table.tex
 scenarios.RData
 /figs
 supp.RData
+.RDataTmp
+.Rhistory
