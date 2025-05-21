@@ -1,5 +1,6 @@
 #install_github("mjharris95/fect") #on first run, use this to install modified fect package
 library(tidyverse)
+library(scales)
 library(sf)
 library(lubridate)
 library(viridis)
@@ -17,6 +18,8 @@ library(colorspace)
 library(psych)
 library(berryFunctions)
 library(ggspatial)
+library(ggpattern)
+library(RColorBrewer)
 set.seed(0514) # make sure to always set the seed so results are replicable
 source("supporting-functions.R")
 
@@ -68,47 +71,6 @@ anomaly_df %>% filter(country %in% c("PER3")) %>%
   theme_classic()
 
 ggsave("figs/anomaly_dist.pdf", height=4, width=4, units="in")
-
-# make maps of baseline climate conditions
-map3 <- read_sf("maps/CDC_Distritos.shp") %>%
-  rename(id = ubigeo) %>% 
-  merge(anomaly_df %>% filter(country=="PER3"))
-
-map3 %>%  filter(country=="PER3") %>%
-  filter(diff_rain > .0085 & id %in% cases_2023) %>%
-  summarise(id = "extreme") -> extreme_map3 # treated districts most heavily impacted by extreme precip
-
-# merge data and plot for adm1
-p2a <- ggplot() + 
-  geom_sf(data=map3, aes(fill=diff_rain*1000), col=NA) +
-  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of extreme precip districts
-  scale_fill_viridis("Precipitation Anomaly (mm/day)", option="H")+
-  theme_void() +
-  theme(legend.position="bottom")+
-  annotation_scale(style="ticks", pad_x= unit(0, "cm"))+
-  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5,
-                                barwidth=11))
-
-p2b <- ggplot() + 
-  geom_sf(data=map3, aes(fill=mean_rain*1000), col=NA) +
-  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of extreme precip districts
-  scale_fill_viridis("Historic Precipitation (mm/day)", option="viridis", 
-                     direction = -1)+
-  theme_void() +
-  theme(legend.position="bottom")+
-  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5, barwidth=11))
-
-p2c <- ggplot()+
-  geom_sf(data=map3, aes(fill=mean_temp),col=NA) +
-  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of extreme precip districts
-  scale_fill_viridis("Historic Temperature (C)", option="plasma", breaks=c(5, 10, 15, 20, 25))+
-  theme_void() +
-  theme(legend.position="bottom")+
-  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5, barwidth=11))
-
-plot_grid(p2a, p2b, p2c, nrow=1, labels="AUTO", rel_widths=c(1,1,1), align="h")
-ggsave("figs/climate_map.pdf", height=4, width=8, units="in")
-ggsave("figs/climate_map.png", dpi=320, height=4, width=8, units="in")
 
 # plot temperature-dependent R0 curve
 read.csv("AedesR0Out.csv") %>%
@@ -224,18 +186,90 @@ pop_df %<>% filter(!is.na(pop))
 match_out_allper <- match_fun(anomaly_upper = .0085, anomaly_lower = .007,
                               cases_2023 = cases_2023,
                               my_country = "PER3", 
-                              match_num=10,
+                              match_num=5,
                               plot_bal=TRUE, plot_map=TRUE, 
                               file_prefix="adm3-allper",
                               map=per_map, big_map=dept_map)
 
 synth_out_allper <- synth_fun(case_df, match_out_allper, pop_df, "adm3-allper", 
-                              att_plot=TRUE, spatt_plot=FALSE, map=per_map, 
+                              att_plot=TRUE, spatt_plot=TRUE, map=per_map, 
                               big_map=dept_map, use_clim=TRUE, use_r0=FALSE,
                               start_year = 2016, inc=TRUE)
 
 # save matching and synthetic control outputs
 save(match_out_allper, synth_out_allper, file="peru-main.RData")
+
+
+# make maps of baseline climate conditions
+map3 <- read_sf("maps/CDC_Distritos.shp") %>%
+  rename(id = ubigeo) %>% 
+  merge(anomaly_df %>% filter(country=="PER3"))
+
+map3 %>%  filter(country=="PER3") %>%
+  filter(id %in% match_out_allper$treated_names) %>%
+  summarise(id = "extreme") -> extreme_map3 # treated districts most heavily impacted by extreme precip
+
+# matched control districts
+map3 %>%  filter(country=="PER3") %>%
+  filter(id %in% match_out_allper$match_names) %>%
+  summarise(id = "matched") -> match_map3 # treated districts most heavily impacted by extreme precip
+
+# initialize signed sqrt transform (from https://andrewpwheeler.com/2015/07/31/custom-square-root-scale-with-negative-values-in-ggplot2-r/)
+S_sqrt <- function(x){sign(x)*sqrt(abs(x))}
+IS_sqrt <- function(x){x^2*sign(x)}
+S_sqrt_trans <- function() trans_new("S_sqrt",S_sqrt,IS_sqrt)                   
+     
+# merge data and plot for adm1
+p2a <- ggplot() + 
+  geom_sf(data=map3, aes(fill=diff_rain*1000), col=NA) +
+  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of extreme precip districts
+  geom_sf_pattern(data = match_map3, pattern="stripe", pattern_angle=30,
+                  pattern_size=.3, pattern_density=.5, pattern_spacing=.03,
+                  pattern_linetype="dotted",
+                  pattern_fill=NA, pattern_colour="black",
+                  fill=NA, col=NA)+ 
+  scale_fill_fermenter(type="div", palette = "BrBG", 
+                       limits=c(-15, 15), direction=1,
+                       breaks=seq(from=-15,to=15, by=3),
+                       labels=seq(from=-15,to=15, by=3) %>% ifelse(.%% 6 == 0, ., ""))+
+  theme_void() +
+  theme(legend.position="bottom")+
+  annotation_scale(style="ticks", pad_x= unit(0, "cm"))+
+  guides(fill = guide_colourbar("Precipitation Anomaly (mm/day)", 
+                                title.position="top", title.hjust = 0.5,
+                                barwidth=11))
+
+p2b <- ggplot() + 
+  geom_sf(data=map3, aes(fill=mean_rain*1000), col=NA) +
+  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of extreme precip districts
+  geom_sf_pattern(data = match_map3, pattern="stripe", pattern_angle=30,
+                  pattern_size=.3, pattern_density=.5, pattern_spacing=.03,
+                  pattern_linetype="dotted",
+                  pattern_fill=NA, pattern_colour="black",
+                  fill=NA, col=NA)+ 
+  scale_fill_viridis("Historical Precipitation (mm/day)", option="viridis", 
+                     direction = -1)+
+  theme_void() +
+  theme(legend.position="bottom")+
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5, barwidth=11))
+
+p2c <- ggplot()+
+  geom_sf(data=map3, aes(fill=mean_temp),col=NA) +
+  geom_sf(data = extreme_map3, col = "black", fill=NA, linewidth = .4)+ # bold outline of extreme precip districts
+  geom_sf_pattern(data = match_map3, pattern="stripe", pattern_angle=30,
+                  pattern_size=.3, pattern_density=.5, pattern_spacing=.03,
+                  pattern_linetype="dotted",
+                  pattern_fill=NA, pattern_colour="black",
+                  fill=NA, col=NA)+ 
+  scale_fill_viridis("Historical Temperature (C)", option="plasma", breaks=c(5, 10, 15, 20, 25))+
+  theme_void() +
+  theme(legend.position="bottom")+
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5, barwidth=11))
+
+plot_grid(p2a, p2b, p2c, nrow=1, labels="AUTO", rel_widths=c(1,1,1), align="h")
+#ggsave("figs/climate_map.pdf", height=4, width=8, units="in")
+ggsave("figs/climate_map.png", dpi=320, height=4, width=8, units="in")
+
 
 # Get names of treated districts
 read_xlsx("maps/UBIGEODISTRITOS.XLSX") %>%
@@ -274,7 +308,7 @@ case_df_weekly <- case_df %>%
   mutate(date = ymd(paste(year, 1, 1, sep = "-")) + weeks(week - 1)) %>% 
   filter(year >= 2016)
 
-rbind(case_df_weekly %>%
+inc_data <- rbind(case_df_weekly %>%
         filter(id %in% match_out_allper$treated_names) %>%
         mutate(group = "Extreme Precip."),
       case_df_weekly %>%
@@ -283,17 +317,32 @@ rbind(case_df_weekly %>%
       case_df_weekly %>% 
         filter(id %in% setdiff(cases_2023, match_out_allper$treated_names)) %>%
         mutate(group = "Non-extreme Precip.")) %>%
-  group_by(date, group) %>%
+  group_by(date, group, year) %>%
   summarize(cases = sum(cases)) %>%
   left_join(group_pop) %>%
   mutate(incidence = cases/pop*1000) %>%
+  distinct()
+
+inc_data %>% 
+    filter(group == "Extreme Precip.") %>%
+    group_by(year) %>%
+    summarize(avg =  sprintf("%.2f", max(incidence))) 
+
 ggplot()+
-  geom_line(aes(x=date, y = incidence, group=group, color=group), lwd=.5, alpha=.6)+
+  # geom_rect(aes(xmin = seq.Date(from = as.Date("2016-01-01"), to = as.Date("2022-01-01"), by = "2 years"),
+  #               xmax = seq.Date(from = as.Date("2016-12-31"), to = as.Date("2022-12-31"), by = "2 years"),
+  #               ymin = -Inf, ymax = Inf), fill="grey90", colour="grey90")+
+  # geom_text(data = inc_lab, aes(x=xpos, y = ypos, label=tot))+
+  geom_line(data = inc_data, aes(x=date, y = incidence, group=group, color=group), lwd=.5, alpha=.6)+
+  geom_point(data = inc_data %>% filter(month(date) %in% c(1,4,7,10) & day(date)<8), aes(x=date, y = incidence, group=group, color=group, pch=group))+
   ylab("Incidence (cases per thousand people)") +
   xlab("Time (years)")+
   scale_color_manual("",
                      breaks = c("Extreme Precip.", "Matched Control", "Non-extreme Precip."),
                      values = c("#581845", "#6FC0DB", "#FFC300"))+
+  scale_shape_manual("",
+                     breaks = c("Extreme Precip.", "Matched Control", "Non-extreme Precip."),
+                     values = c(16, 17, NA))+
   theme_classic()+
   theme(legend.position="bottom")+
   geom_vline(aes(xintercept=as_date("2023-03-07")), lty="dashed", color="red")+
@@ -328,14 +377,19 @@ synth_out_allper$gsynth_obj$est.att %>%
 synth_out_allper$gsynth_obj$est.beta
 
 # Plot latent factors
-synth_out_allper$gsynth_obj$factor %>% 
+lf_df <- synth_out_allper$gsynth_obj$factor %>% 
   data.frame() %>% 
   mutate(time=row_number()) %>% 
-  pivot_longer(!time, names_to="Factor", names_prefix="X", values_to="Estimate") %>% 
+  pivot_longer(!time, names_to="Factor", names_prefix="X", values_to="Estimate") 
+
   ggplot() + 
-  geom_line(aes(x=time, y=Estimate, color=Factor, group=Factor))+
+  geom_line(data=lf_df, aes(x=time, y=Estimate, color=Factor, group=Factor, lty=Factor), alpha=.8)+
+  geom_point(data=lf_df %>% filter(time %% 5 == 0), aes(x=time, y=Estimate, color=Factor, group=Factor, pch=Factor), size=1)+
   scale_x_continuous(breaks=synth_out_allper$year_ind,
                      labels=synth_out_allper$years)+
+  scale_shape_manual(values=c(NA, 4, NA, NA, 15))+
+  scale_linetype_manual(values=c("solid", "solid", "dashed", "dotdash", "solid"))+
+  scale_color_manual(values= c("#ffb000", "#fe6100", "#dc267f", "#785ef0", "#648fff"))+
   theme_classic()+
   theme(legend.position="bottom",
         axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
@@ -367,23 +421,53 @@ ggsave("figs/fl-maps.pdf", height=8, width=8, units="in")
 
 
 # Output values of attributable cases per thousand and sort by that
-dist_name <- coastal_dist <- read_xlsx("maps/UBIGEODISTRITOS.XLSX") %>%
+dist_name <- read_xlsx("maps/UBIGEODISTRITOS.XLSX") %>%
   mutate(IDDIST = str_pad(IDDIST, 6, pad="0")) %>%
   rename(id = IDDIST)
 
 lapply(match_out_allper$treated_names, function(x)
-  synth_out_allper$gsynth_obj$group.output[[x]]$att.on %>% tail(9) %>% head(-1) %>% sum() %>% data.frame(att.inc = .*1000, id=x)) %>%
+  synth_out_allper$gsynth_obj$group.output[[x]]$att.on %>% 
+    tail(9) %>% 
+    head(-1) %>% 
+    data.frame(att.inc = sum(.)*1000, 
+               peak.inc = max(.)*1000, 
+               when.max = which.max(.), 
+               id=x) %>%
+               select(att.inc, peak.inc, when.max, id)) %>% 
+
   do.call(rbind, .) %>%
   arrange(desc(att.inc)) %>%
-  left_join(dist_name)
+  left_join(dist_name) %>%
+  distinct()
 
+# for slides: plot difference zoomed in
+
+epiweek_df <- data.frame(dates= seq.Date(from = as_date("2023-03-25"),
+                                         to = as_date("2023-12-02"),
+                                         by = "28 days"),
+                         step=1:10) 
+
+synth_out_allper$gsynth_obj$est.att %>%
+  data.frame() %>%
+  tail(10) %>%
+  mutate(step = row_number()) %>%
+  left_join(epiweek_df) %>%
+  ggplot() + 
+  geom_ribbon(aes(x=dates, ymax=upper.cases, ymin=lower.cases), fill="grey70")+
+  geom_line(aes(x=dates, y=mid.cases))+
+  geom_point(aes(x=dates, y=mid.cases))+
+  theme_classic()+
+  scale_x_date(date_breaks = "2 months", date_labels = "%b")+
+  geom_hline(aes(yintercept=0))
+
+ggsave("figs/diff-plot-zoomed.pdf", height=4, width=4, units="in")
 
 
 #### RUN SUPPLEMENTAL SYNTHETIC CONTROL ANALYSES ####
 ### Run for just coastal
 match_out_coast <- match_fun(anomaly_upper = .0085, anomaly_lower = .007,
                              coastal_dist = coastal_dist, cases_2023 = cases_2023,
-                             match_num=10,
+                             match_num=5,
                              my_country = "PER3", 
                              plot_bal=FALSE, plot_map=FALSE, file_prefix="adm3-coast",
                              map=per_map, big_map=dept_map)
@@ -543,7 +627,7 @@ for(anomaly_upper in c(.007, .0085, .01)){
                             anomaly_lower = anomaly_lower,
                             cases_2023 = cases_2023,
                             my_country = "PER3",
-                            match_num=10)
+                            match_num=5)
       
       my_synth <- synth_fun(case_df, 
                             my_match, 
@@ -953,6 +1037,91 @@ synth_out_adm1 <- synth_fun(case_df_adm1, match_out_adm1,
                             use_clim=TRUE, use_r0=FALSE,
                             start_year = 2018, end_week=28, inc=TRUE)
 
+# identify and exclude district with especially large factor loadings for factor 1 & 2
+data.frame("Loading" = synth_out_allper$gsynth_obj$lambda,
+           "id" = synth_out_allper$gsynth_obj$id) %>%
+arrange(desc(abs(Loading.1)))
+
+read_sf("maps/CDC_Distritos.shp") %>%
+  rename(id = ubigeo) %>%
+  mutate(is_focus = ifelse(id == "170103", TRUE, FALSE)) %>%
+  ggplot() +
+  geom_sf(aes(fill=is_focus), col="black")+
+  scale_fill_manual(values=c("white", "red")) +
+  theme_map()+
+  theme(legend.position="none")
+
+ggsave(paste0("figs/removedis-map.pdf"), height=20, width=20, units="cm")
+
+match_removedis <- match_out_allper
+match_removedis$match_names <- setdiff(match_removedis$match_names, "170103")
+
+synth_out_removedis <- synth_fun(case_df, match_removedis, pop_df, "adm3-removedis", 
+                              att_plot=TRUE, spatt_plot=FALSE, map=NA, 
+                              big_map=dept_map, use_clim=TRUE, use_r0=FALSE,
+                              start_year = 2016, inc=TRUE)
+
+lf_df_removedis <- synth_out_removedis$gsynth_obj$factor %>% 
+  data.frame() %>% 
+  mutate(time=row_number()) %>% 
+  pivot_longer(!time, names_to="Factor", names_prefix="X", values_to="Estimate") 
+
+ggplot() + 
+  geom_line(data=lf_df_removedis, aes(x=time, y=Estimate, color=Factor, group=Factor, lty=Factor), alpha=.8)+
+  geom_point(data=lf_df_removedis %>% filter(time %% 5 == 0), aes(x=time, y=Estimate, color=Factor, group=Factor, pch=Factor), size=1)+
+  scale_x_continuous(breaks=synth_out_allper$year_ind,
+                     labels=synth_out_allper$years)+
+  scale_shape_manual(values=c(NA, 4, NA, NA, 15))+
+  scale_linetype_manual(values=c("solid", "solid", "dashed", "dotdash", "solid"))+
+  scale_color_manual(values= c("#ffb000", "#fe6100", "#dc267f", "#785ef0", "#648fff"))+
+  theme_classic()+
+  theme(legend.position="bottom",
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  xlab("Time")
+
+ggsave("figs/lf-vals-removedis.pdf", height=4, width=4, units="in")
+
+# plot factor loadings on a map
+lp_rd <- list()
+for(i in 1:5){
+  lp_rd[[i]] <- data.frame("Loading" = synth_out_removedis$gsynth_obj$lambda[,i],
+                        "id" = synth_out_removedis$gsynth_obj$id) %>%
+    merge(per_map, .) %>%
+    ggplot()+
+    geom_sf(aes(fill=Loading), color="grey40", size=.01)+
+    geom_sf(data=dept_map, fill=NA, color="black", size=.01)+
+    theme_map()+
+    ggtitle(paste0("Latent Factor ",i))+
+    scale_fill_continuous_diverging(palette = "Purple-Green")
+}
+
+plot_grid(lp_rd[[1]], 
+          lp_rd[[2]],
+          lp_rd[[3]],
+          lp_rd[[4]],
+          lp_rd[[5]], nrow=3)
+
+ggsave("figs/fl-maps-removedis.pdf", height=8, width=8, units="in")
+
+#### run analysis excluding control districts with negative precipitation anomalies
+nonneg <-   anomaly_df %>% 
+              filter(diff_rain > 0 ) %>%
+              select(id)  %>% 
+              unlist()
+
+match_out_nonneg <- match_fun(anomaly_upper = .0085, anomaly_lower = .007,
+                              cases_2023 = cases_2023,
+                              coastal_dist = nonneg,
+                              my_country = "PER3", 
+                              match_num=5,
+                              plot_bal=FALSE, plot_map=FALSE, 
+                              file_prefix="adm3-nonneg",
+                              map=per_map, big_map=dept_map)
+
+synth_out_nonneg <- synth_fun(case_df, match_out_nonneg, pop_df, "adm3-nonneg", 
+                              att_plot=TRUE, spatt_plot=FALSE, map=per_map, 
+                              big_map=dept_map, use_clim=TRUE, use_r0=FALSE,
+                              start_year = 2016, inc=TRUE)
 
 #### ANALYSIS FOR PART 2: SOCIOVULNERABILITY INDICES BEGINS HERE ####
 # would recommend detaching other packages due to interference between dplyr and terra select
@@ -966,7 +1135,7 @@ library(reshape2)
 library(colorspace)
 library(cowplot)
 library(xtable)
-
+library(readxl)
 # read in shapefile of districts
 per_map<-read_sf("maps/CDC_Distritos.shp") %>%
   rename(id = ubigeo)
@@ -1046,7 +1215,6 @@ for(file in files[startsWith(files, "r_")]){
     left_join(socio_sum) %>%
     mutate(avg_socio = var/pop) %>%
     mutate(var_name = var_name) %>%
-    filter(DEPARTAMEN == dept) %>%
     rbind(covar_df)
   
   
@@ -1057,8 +1225,153 @@ for(file in files[startsWith(files, "r_")]){
 
 load("covar_df.RData")
 
+per_map<-read_sf("maps/CDC_Distritos.shp") %>%
+  rename(id = ubigeo)
+
+# read in, combine population density files
+files <- dir("cov")[startsWith(dir("cov/"), "r_dpob")]
+
+dpop <- lapply(files, function(file) rast(paste0("cov/", file))) %>%
+  do.call(merge, .) %>%
+  project(per_map) 
+
+# read flood susceptibility file
+flood_sus <- rast("cov/Susceptibilidad a inundaciones1.tif") %>%
+  project(., per_map)
+
+dpop2 <- crop(dpop, flood_sus) %>%
+  resample(flood_sus, method="bilinear")
+
+
+# weight covariates based on population
+flood_mult <- flood_sus * dpop2
+
+# get population-weighted sum
+flood_sum <- terra::extract(flood_mult, per_map,
+                            fun="sum", na.rm=TRUE,
+                            bind = TRUE) %>%
+  st_drop_geometry() %>%
+  data.frame() %>%
+  rename(var = 5)
+
+# get population and calculate pop-weighted mean
+flood_df <- terra::extract(dpop2, per_map,
+                           fun="sum", na.rm=TRUE,
+                           bind = TRUE) %>% 
+  st_drop_geometry %>%
+  data.frame() %>%
+  rename(pop = 5) %>%
+  left_join(flood_sum) %>%
+  mutate(avg_socio = var/pop) %>%
+  mutate(var_name = "flood") %>%
+  dplyr::filter(id %in% match_out_allper$treated_names)
+
+# read in land use shapefile
+per_map %<>% filter(id %in% cases_2023)
+
+lu_map <- rast("cov/landuse/peru_coverage_2022.tif") %>%
+  project(., per_map)
+
+land_types <- freq(lu_map)$value
+
+# align the rasters
+dpop <- project(dpop, per_map) %>%
+        crop(lu_map) %>%
+        extend(lu_map) %>%
+        resample(lu_map, method = "near")
+
+# population in each type of land type
+lu_mask <- lapply(land_types, function(type) ifel(lu_map == type, dpop, 0)) %>%
+            rast()
+
+names(lu_mask) <- sapply(land_types, function (type) paste0("LU_", type))
+
+lu_pop <- lu_mask %>%
+            terra::zonal(vect(per_map), "sum", na.rm = TRUE)
+lu_pop$id <- per_map$id
+
+#write.csv(lu_pop, "lu_pop.csv")
+
+dpopsq <- dpop*dpop 
+  
+popsq_df <- terra::extract(dpopsq, per_map,
+                         fun="sum", na.rm=TRUE,
+                         bind = TRUE) %>%
+  st_drop_geometry() %>%
+  data.frame() %>%
+  mutate(var = "pop_sq")
+
+pop_df <- dpop %>%
+  terra::extract(per_map,
+                 fun="sum", na.rm=TRUE,
+                 bind = TRUE) %>%
+  st_drop_geometry() %>%
+  data.frame() %>%
+  mutate(var = "pop") %>%
+  rename(val = dpop_AMAZONAS)
+
+popsq_df %<>% 
+  left_join(dplyr::select(pop_df, id, val)) %>%
+  mutate(avg_socio = dpob_AMAZONAS/val)
+
+save(pop_df, popsq_df, file="pop_tomatch.RData")
+
+lu_pop <- read.csv("lu_pop.csv") %>%
+          mutate(id = str_pad(id, 6, pad="0")) 
+
+lu_pop <- pop_df %>% 
+          dplyr::select(id, val) %>%
+          rename(pop = val) %>%
+          left_join(lu_pop) 
+  
+
+lu_dict <- data.frame(name = c("prop_LU_0", "prop_LU_11", "prop_LU_12", "prop_LU_13", "prop_LU_15",
+                               "prop_LU_18", "prop_LU_21", "prop_LU_24", 
+                               "prop_LU_25", "prop_LU_27",
+                               "prop_LU_3", "prop_LU_30", "prop_LU_31", "prop_LU_32", "prop_LU_33",
+                               "prop_LU_34", "prop_LU_35", "prop_LU_4", "prop_LU_5", "prop_LU_6", 
+                               "prop_LU_9", "prop_LU_21new"),
+                      lu_type = c("??", "Flood Grassland/Scrubland", "Grassland", "Scrubland", "Pasture",
+                                  "Agriculture", "Agriculture/Pasture Mosaic", "Infrastructure",
+                                  "Non-vegetated (Other)", "Not Observed",
+                                  "Forest", "Mining", "Aquaculture", "Salt Flat", "River/Lake",
+                                  "Glacier", "Oil Palm", "Dry Forest", "Mangrove", "Flooded Forest", 
+                                  "Forest Plantation", "Agriculture and Pasture"))
+covar_df <- lu_pop %>%
+  data.frame() %>%
+  dplyr::select(starts_with("LU") | starts_with("id")) %>%
+  rowwise() %>%
+  mutate(pop = sum(c_across(LU_0:LU_35), na.rm=TRUE), # Sum across population in each land use type
+         across(LU_0:LU_35, ~ . / pop, .names = "prop_{col}") # Divide each by the sum
+  ) %>%
+  ungroup() %>%
+  mutate_at(vars(starts_with("LU")), as.numeric) %>%
+  filter(id != "200604") %>%
+  mutate(prop_LU_21new = prop_LU_21 + prop_LU_15 + prop_LU_18) %>%
+  dplyr::select(c("prop_LU_21new", "prop_LU_25", "prop_LU_24", "prop_LU_4", "id")) %>%
+  pivot_longer(-id) %>%
+  left_join(lu_dict) %>%
+  filter(lu_type %in% c("Agriculture and Pasture", 
+                        "Dry Forest", 
+                        "Infrastructure",
+                        "Non-vegetated (Other)")) %>%
+  # make sure we can bind this to the existing covar_df 
+  rename(avg_socio = value,
+         var_name = lu_type) %>%
+  mutate(pop = NA,
+         DISTRITO = NA,
+         PROVINCIA = NA,
+         DEPARTAMEN = NA,
+         var = NA) %>%
+  dplyr::select(-name) %>%
+  dplyr::filter(id %in% match_out_allper$treated_names) %>% 
+  rbind(covar_df)
+
+#save(covar_df, file="covar_df.RData")
+
 # load in the matching and gsynth results
 load("peru-main.RData")
+load("covar_df.RData")
 
 # filter covariates to the extreme precip districts
 covar_df %<>%
@@ -1078,7 +1391,8 @@ covar_df <- read.csv("anomaly_df.csv") %>%
   dplyr::select(id, temp, rain) %>%
   right_join(covar_df) %>%
   filter(!is.nan(vui)) %>%
-  dplyr::select(-c(socio_vpr, socio_vps, socio_vtc))
+  dplyr::select(-c(socio_vpr, socio_vps, socio_vtc, vui, "Non-vegetated (Other)")) %>%
+  rename("Agriculture and pasture" = "Agriculture and Pasture")
 
 
 #plot correlations between indices
@@ -1088,7 +1402,7 @@ covar_df %>%
   reshape2::melt() %>%
   mutate(Var1 = recode(Var1, 
                        "rain" = "Precipitation", 
-                       "vui" = "Flood susceptibility",
+                       "flood" = "Flood susceptibility",
                        "socio_vpr" = "Low-quality walls",
                        "socio_vtc" = "Low-quality roofs",
                        "temp" = "Temperature",
@@ -1101,7 +1415,7 @@ covar_df %>%
                        "vias" = "Distance to \n roads"),
          Var2 =  recode(Var2, 
                         "rain" = "Precipitation", 
-                        "vui" = "Flood susceptibility",
+                        "flood" = "Flood susceptibility",
                         "socio_vpr" = "Low-quality walls",
                         "socio_vtc" = "Low-quality roofs",
                         "temp" = "Temperature",
@@ -1123,6 +1437,31 @@ covar_df %>%
 
 ggsave(paste0("figs/covar-cor.pdf"), height=20, width=20, units="cm")
 
+# plot to illustrate relative proportion of different land use types
+name_dict <- read_xlsx("maps/UBIGEODISTRITOS.XLSX") %>%
+  mutate(IDDIST = str_pad(IDDIST, 6, pad="0")) %>%
+  rename(id = IDDIST) 
+  select(id, NOMBDIST)
+  
+covar_df %>%
+  dplyr::select(c("Agriculture and pasture", "Dry Forest", "Infrastructure", "id")) %>%
+  pivot_longer(-id) %>%
+  mutate(name = factor(name, levels = c("Agriculture and pasture", "Dry Forest", "Infrastructure"))) %>%
+
+  ggplot() +
+  geom_col(aes(y=as.factor(id), x=value, fill=name)) +
+  scale_y_discrete("District", breaks=name_dict$id, labels=str_to_title(name_dict$NOMBDIST))+
+  theme_classic()+
+  theme(legend.position="bottom")+
+  scale_x_continuous("Population Proportion")+
+  scale_fill_viridis_d("Land Type",
+                       breaks = c("Agriculture and pasture", "Dry Forest", "Infrastructure"))+
+  guides(fill = guide_legend(reverse = TRUE)) 
+  
+
+ggsave(paste0("figs/lu-prop.pdf"), height=25, width=20, units="cm")
+
+
 # determine number of factors to use based on vss
 covar_df %>% 
   dplyr::select(-c(id)) %>%
@@ -1140,7 +1479,7 @@ pca_res$loadings %>%
   rownames_to_column() %>%
   mutate(rowname = recode(rowname, 
         "rain" = "Precipitation", 
-        "vui" = "Flood susceptibility",
+        "flood" = "Flood susceptibility",
         "socio_vpr" = "Low-quality walls",
         "socio_vtc" = "Low-quality roofs",
         "temp" = "Temperature",
@@ -1155,7 +1494,7 @@ pca_res$loadings %>%
   arrange(desc(RC1)) %>%
   mutate(RC1 = round(RC1, digits=2),
          RC2 = round(RC2, digits=2),
-         RC3 = round(RC3, digits=3)) %>%
+          RC3 = round(RC3, digits=2)) %>%
   mutate(RC1 = ifelse(abs(RC1)>= .6, paste0("textbf{", RC1, "}"), RC1),
          RC2 = ifelse(abs(RC2)>= .6, paste0("textbf{", RC2, "}"), RC2),
          RC3 = ifelse(abs(RC3)>= .6, paste0("textbf{", RC3, "}"), RC3)) %>%
@@ -1174,7 +1513,7 @@ RC_labs <- pca_res$loadings %>%
   # make this into the correct variable names
   mutate(lab = recode(rowname, 
                       "rain" = "Precipitation", 
-                      "vui" = "Flood susceptibility",
+                      "flood" = "Flood susceptibility",
                       "socio_vpr" = "Low-quality walls",
                       "socio_vtc" = "Low-quality roofs",
                       "temp" = "Temperature",
@@ -1182,7 +1521,8 @@ RC_labs <- pca_res$loadings %>%
                       "socio_vtp" = "Low-quality housing",
                       "socio_acc" = "Nonpublic \nwater source",
                       "socio_arg" = "Inconsistent \nwater access",
-                      "hidro" = "Distance to \nbody of water")) %>%
+                      "hidro" = "Distance to \nbody of water",
+                      "socio_vhc" = "Household overcrowding")) %>%
   mutate(lab = paste0( #ifelse(value < 0, "- ", "+ "), 
     lab, " (",  sprintf("%.2f", round(value, 2)), ")")) %>% 
   group_by(name) %>% 
@@ -1195,8 +1535,8 @@ pca_res$scores %>%
   data.frame() %>%
   cbind(covar_df, .) -> covar_df
 
-# extract attributable incidence in each district across the post-cyclone period (March 25 - July 14)
-eff_ind <- which(rownames(synth_out_allper$gsynth_obj$est.att) %in% c("2", "3", "4", "5"))
+# extract attributable incidence in each district across the post-cyclone period 
+eff_ind <- which(rownames(synth_out_allper$gsynth_obj$est.att) %in% c("3", "4", "5"))
 
 sapply(covar_df$id, function(dist_id) synth_out_allper$gsynth_obj$eff[eff_ind, which(synth_out_allper$gsynth_obj$id==dist_id)] %>% sum()) %>%
   data.frame(ATT = .,
@@ -1288,3 +1628,34 @@ p2 <- boot_vals %>%
 plot_grid(p1, p2, nrow=2, labels="AUTO")
 ggsave(paste0("figs/vul-ind.pdf"), height=11, width=11, units="cm")
 
+
+#### ADDITIONAL SUPPLEMENTAL ANALYSIS: MATCHING ON LAND USE OR POP DENSITY
+detach("package:terra", unload = TRUE)
+detach("package:raster", unload = TRUE)
+load("covar_df.RData")
+
+match_extra <- popsq_df %>%
+  select(id,avg_socio) %>%
+  rename(dpop = avg_socio)
+  
+match_extra <- covar_df %>%
+  filter(var_name == "Infrastructure") %>%
+  select(id, avg_socio) %>%
+  rename("Infrastructure" = avg_socio) %>%
+  right_join(match_extra) %>%
+  filter(id %in% cases_2023)
+
+match_out_allper_extravars <- match_fun(anomaly_upper = .0085, anomaly_lower = .007,
+                              cases_2023 = cases_2023,
+                              extra_vars = match_extra,
+                              my_country = "PER3", 
+                              match_num=5,
+                              plot_bal=TRUE, plot_map=TRUE, 
+                              file_prefix="adm3-allper_extravar",
+                              map=per_map, big_map=dept_map)
+
+
+synth_out_matchextra <- synth_fun(case_df, match_out_allper_extravars, pop_df, "adm3-allper_extravar", 
+                              att_plot=TRUE, spatt_plot=TRUE, map=per_map, 
+                              big_map=dept_map, use_clim=TRUE, use_r0=FALSE,
+                              start_year = 2016, inc=TRUE)

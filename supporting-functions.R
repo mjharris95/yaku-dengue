@@ -1,3 +1,19 @@
+# See: https://github.com/wilkelab/cowplot/issues/202#issuecomment-1981666998
+# debugs issue with newer versions of ggplot2 not working with get_legend
+get_legend_35 <- function(plot) {
+  # return all legend candidates
+  legends <- get_plot_component(plot, "guide-box", return_all = TRUE)
+  # find non-zero legends
+  nonzero <- vapply(legends, \(x) !inherits(x, "zeroGrob"), TRUE)
+  idx <- which(nonzero)
+  # return first non-zero legend if exists, and otherwise first element (which will be a zeroGrob) 
+  if (length(idx) > 0) {
+    return(legends[[idx[1]]])
+  } else {
+    return(legends[[1]])
+  }
+}
+
 #### STANDARDIZED DIFFERENCE PLOT ####
 
 # Returns a plot of the standardized difference between climate covariates in treated 
@@ -15,7 +31,7 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
   # Scatterplot of mean temperature vs precipitation prior to matching 
    scatter_bal_df <- match_out$df %>%
                         filter(is_control == "Matched Control") %>%
-                        mutate(is_control = "Extreme precipitation") %>%
+                        mutate(is_control = "Extreme Precipitation") %>%
                         rbind(match_out$df) %>%
                         filter(step < cyclone_step) %>%
                         group_by(is_control, step) %>%
@@ -24,7 +40,7 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
   
   ggplot() + 
     geom_point(data = scatter_bal_df,
-               aes(x=wmean_temp, y=wmean_rain, color=is_control)) +
+               aes(x=wmean_temp, y=wmean_rain, color=is_control, pch=is_control)) +
     stat_smooth(data = scatter_bal_df %>% filter(is_control=="Extreme Precipitation"),
                 aes(y=wmean_rain, x=wmean_temp), 
                 method = "lm", 
@@ -36,8 +52,13 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
     xlab("Temperature")+
     theme(legend.position="bottom")+
     scale_color_manual("",
-                       breaks = c("Extreme Precipitation", "Matched Control", "Non-extreme Precipitation", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
-                       values = c("#581845", "#6FC0DB", "#FFC300", "grey90", "grey50", "maroon"))
+                       breaks = c("Extreme Precipitation", "Matched Control", "Non-extreme Precipitation"),
+                       values = c("#581845", "#6FC0DB", "#FFC300"))+
+    scale_shape_manual("",
+                       breaks = c("Extreme Precipitation", "Matched Control", "Non-extreme Precipitation"),
+                       values = c(16, 17, 18)) +
+    guides(color = guide_legend(override.aes = list(shape = c(16, 17, 18))))
+  
   
   ggsave(paste0("figs/", file_prefix, "clim_matchscatter.pdf"), height=6, width=8, units="in")
 
@@ -86,7 +107,7 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
     stat_summary(aes(x=step, y = rain_diff/sd(baldf$mean_rain)), fun.y=mean, colour="black", geom="line", lwd=.8)+
     theme_classic()+
     ylab("Std. Diff.")+
-    scale_y_continuous(limits=c(-3, 5))+
+    scale_y_continuous(limits=c(-4, 5))+
     geom_hline(yintercept=0, color="red", linetype="dashed")+
     scale_x_continuous(breaks=year_ind, labels=years)+
     xlab("Time")
@@ -97,7 +118,7 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
     stat_summary(aes(x=step, y = rain_diff/sd(baldf$mean_rain)), fun.y=mean, colour="black", geom="line", lwd=.8)+
     theme_classic()+
     ylab("Std. Diff.")+
-    scale_y_continuous(limits=c(-3, 5))+
+    scale_y_continuous(limits=c(-4, 5))+
     geom_hline(yintercept=0, color="red", linetype="dashed")+
     scale_x_continuous(breaks=year_ind, labels=years)+
     xlab("Time")
@@ -108,7 +129,7 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
     stat_summary(aes(x=step, y = temp_diff/sd(baldf$mean_temp)), fun.y=mean, colour="black", geom="line", lwd=.8)+
     theme_classic()+
     ylab("Std. Diff")+
-    scale_y_continuous(limits=c(-2.5, 1.5))+
+    scale_y_continuous(limits=c(-3, 1.6))+
     geom_hline(yintercept=0, color="red", linetype="dashed")+
     scale_x_continuous(breaks=year_ind, labels=years)+
     xlab("Time")
@@ -119,7 +140,7 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
     stat_summary(aes(x=step, y = temp_diff/sd(baldf$mean_temp)), fun.y=mean, colour="black", geom="line", lwd=.8)+
     theme_classic()+
     ylab("Std. Diff")+
-    scale_y_continuous(limits=c(-2.5, 1.5))+
+    scale_y_continuous(limits=c(-3, 1.6))+
     geom_hline(yintercept=0, color="red", linetype="dashed")+
     scale_x_continuous(breaks=year_ind, labels=years)+
     xlab("Time")
@@ -142,58 +163,69 @@ balance_plot <- function(match_out, cyclone_step, file_prefix, years, year_ind){
 # Inputs: match_out: output from the match_fun function
 #         cyclone_step: index when cyclone occurred (can be retrieved from match_fun)
 #         file_prefix: prefix to save pdf image
-#         years: the years over which climate data is provided (can be retrieved from match_fun)
-#         year_ind: the indices for when a new year starts (can be retrieved from match_fun)
 #         my_vars: which climate covariates to plot (options: Temperature, Preciptiation, Rel_R0)
 # Output: a pdf figure in the figs folder with suffix -clim_matchcomp
 
 climts_plot <- function(match_out, cyclone_step, file_prefix, 
-                        years, year_ind, my_vars = c("Temperature", "Precipitation")) {
+                        my_vars = c("Temperature", "Precipitation")) {
   
-  match_df <- match_out$df
-  
-    
+  match_df <- match_out$df %>%
+                select(id, weight, is_control) %>%
+                distinct() %>%
+              right_join(., match_out$intermediate_clim_df, multiple="all")
+
   clim_ts <- match_df %>%
     # also include the matched control districts in the non-extreme precip group
     filter(is_control == "Matched Control") %>%
     mutate(is_control = "Non-extreme Precipitation") %>%
     rbind(match_df) %>%
-    group_by(is_control, step) %>%
+    mutate(month = month(date),
+           year = year(date)) %>%
+    group_by(is_control, month, year) %>%
     # take a weighted mean (some matched control districts are included multiple times)
-    dplyr::summarize(Temperature = weighted.mean(mean_temp, weight),
-                     Precipitation = weighted.mean(mean_rain, weight),
-                     Rel_R0 = weighted.mean(mean_rel_r0, weight),
-    ) 
+    dplyr::summarize(Temperature = weighted.mean(temp, weight),
+                     Precipitation = weighted.mean(rain, weight)*1000,
+                     Rel_R0 = weighted.mean(rel_r0, weight),
+    ) %>%
+    mutate(date = ym(paste(year, month))) %>%
+    filter(year(date) >= 2016)
 
     # plot temperature, precipitation, and relative r0
   temp_plot <-  clim_ts %>% 
       ggplot() + 
       # highlight four-week period containing the cyclone
-      geom_rect(xmin = cyclone_step, xmax  = cyclone_step + 1, ymin=-Inf, ymax=Inf, alpha=.5, fill="grey70", color="grey70")+
-      geom_line(aes(x=step, y=Temperature, group=is_control, color=is_control), alpha=.8)+
+      geom_vline(xintercept=as_date("2023-03-01"), linetype="dashed", alpha=.5, color="grey70")+
+      geom_line(aes(x=date, y=Temperature, group=is_control, color=is_control), alpha=.8)+
+      geom_point(aes(x=date, y=Temperature, group=is_control, color=is_control, pch=is_control), alpha=.8)+
       scale_color_manual("",
-                         breaks = c("Extreme Precipitation", "Matched Control", "Non-extreme Precipitation", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
-                         values = c("#581845", "#6FC0DB", "#FFC300", "grey90", "grey50", "maroon"))+
+                         breaks = c("Extreme Precipitation", "Matched Control", "Non-extreme Precipitation"),
+                         values = c("#581845", "#6FC0DB", "#FFC300"))+
+      scale_shape_manual("",
+                         breaks = c("Extreme Precipitation", "Matched Control", "Non-extreme Precipitation"),
+                         values = c(16, 17, NA)) +
       theme_classic()+
       xlab("Year")+
-      scale_x_continuous(breaks=year_ind, # make x-axis years
-                         labels=years)+
+      scale_x_date(breaks="1 year", date_labels="%Y")+
       ylab("Temperature (C)") +
       theme(legend.position="bottom", 
-            axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+            axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) 
+      guides(color = guide_legend(override.aes = list(shape = c(16, 17, NA)))) 
   
     
   rain_plot <-  clim_ts %>% 
     ggplot() + 
-    geom_rect(xmin = cyclone_step, xmax  = cyclone_step + 1, ymin=-Inf, ymax=Inf, alpha=.5, fill="grey70", color="grey70")+
-    geom_line(aes(x=step, y=Precipitation, group=is_control, color=is_control), alpha=.8)+
+    geom_vline(xintercept=as_date("2023-03-01"), linetype="dashed", alpha=.5, color="grey70")+
+    geom_line(aes(x=date, y=Precipitation, group=is_control, color=is_control), alpha=.8)+
+    geom_point(aes(x=date, y=Precipitation, group=is_control, color=is_control, pch=is_control), alpha=.8)+
     scale_color_manual("",
-                       breaks = c("Extreme Precipitation", "Matched Control", "Non-extreme Precipitation", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
-                       values = c("#581845", "#6FC0DB", "#FFC300", "grey90", "grey50", "maroon"))+
+                       breaks = c("Extreme Precipitation", "Matched Control", "Non-extreme Precipitation"),
+                       values = c("#581845", "#6FC0DB", "#FFC300"))+
+    scale_shape_manual("",
+                       breaks = c("Extreme Precipitation", "Matched Control", "Non-extreme Precipitation"),
+                       values = c(16, 17, NA))+
     theme_classic()+
     xlab("Year")+
-    scale_x_continuous(breaks=year_ind,
-                       labels=years)+
+    scale_x_date(breaks="1 year", date_labels="%Y")+
     ylab("Precipitation (mm/day)") +
     theme(legend.position="none", 
           axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
@@ -201,15 +233,14 @@ climts_plot <- function(match_out, cyclone_step, file_prefix,
   # temperature-dependent R0 plot
   r0_plot <-  clim_ts %>%
     ggplot() + 
-    geom_rect(xmin = cyclone_step, xmax  = cyclone_step + 1, ymin=-Inf, ymax=Inf, alpha=.5, fill="grey70", color="grey70")+
-    geom_line(aes(x=step, y=Rel_R0, group=is_control, color=is_control), alpha=.8)+
+    geom_vline(xintercept=as_date("2023-03-01"), linetype="dashed", alpha=.5, color="grey70")+
+    geom_line(aes(x=date, y=Rel_R0, group=is_control, color=is_control), alpha=.8)+
     scale_color_manual("",
-                       breaks = c("Extreme Precipitation", "Matched Control", "Non-extreme Precipitation", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
-                       values = c("#581845", "#6FC0DB", "#FFC300", "grey90", "grey50", "maroon"))+
+                       breaks = c("Extreme Precipitation", "Matched Control", "Non-extreme Precipitation"),
+                       values = c("#581845", "#6FC0DB", "#FFC300"))+
     theme_classic()+
     xlab("Year")+
-    scale_x_continuous(breaks=year_ind,
-                       labels=years)+
+    scale_x_date(breaks="1 year", date_labels="%Y")+
     ylab("Relative R0")+
     theme(legend.position="none", 
           axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
@@ -217,7 +248,7 @@ climts_plot <- function(match_out, cyclone_step, file_prefix,
     # plot a grid of whichever climate variables were requested
     plots<-list()
   
-    leg <- get_legend(temp_plot)
+    leg <- get_legend_35(temp_plot)
     temp_plot <- temp_plot+theme(legend.position="none")
     
     if("Temperature" %in% my_vars){
@@ -282,7 +313,7 @@ matchmap_plot <- function(map, big_map, file_prefix, match_out,
     merge(map, ., all.x=TRUE)
   
   # indicate buffer zones
-  map$is_control <- ifelse(map$id %in% buffer_zone, "Buffer Districts", map$is_control)
+  map$is_control <- ifelse(map$id %in% buffer_zone, "Buffer District", map$is_control)
   
   # indicate places without cases in 2023
   if(length(cases_2023) > 0){
@@ -300,9 +331,18 @@ matchmap_plot <- function(map, big_map, file_prefix, match_out,
     geom_sf(data = map, aes(fill=is_control))+
     geom_sf(data = big_map, fill=NA, color="black", lwd=.8) + # bolds borders of big_map
     theme_void()+
+    # geom_sf_pattern(data=map, aes(pattern=is_control, pattern_angle=is_control),
+    #                 pattern_size=.3, pattern_density=.5, pattern_spacing=.03,
+    #                 pattern_fill=NA, pattern_colour="black",
+    #                 fill=NA, col=NA, alpha=.3)+ 
     scale_fill_manual("",
-                      breaks = c("Extreme Precipitation", "Matched Control", "Non-extreme Precipitation", "No Cases in 2023, Excluded", "Buffer District", "Non-coastal"),
+                      breaks = c("Extreme Precipitation", "Matched Control", "Non-extreme Precipitation", "No Cases in 2023, Excluded", "Buffer District", "Non-Coastal"),
                       values = c("#581845", "#6FC0DB", "#FFC300", "grey90", "grey50", "maroon"))
+    # scale_pattern_manual("",
+    #                       breaks = c("Extreme Precipitation", "Matched Control", "Non-extreme Precipitation", "No Cases in 2023, Excluded", "Buffer District", "Non-Coastal"),
+    #                       values= c('stripe', 'crosshatch', 'circle', "stripe", NA, "stripe"))+
+    # scale_pattern_angle_manual("", breaks = c("Extreme Precipitation", "Matched Control", "Non-extreme Precipitation", "No Cases in 2023, Excluded", "Buffer District", "Non-Coastal"),
+    #                             values= c(0, 0, 0, 60, 0, 90))
   ggsave(paste0("figs/", file_prefix, "-matchmap.png"), height=4, width=8, units="in")
 }
 
@@ -383,7 +423,7 @@ att_plot <- function(case_df, gsynth_out, cyclone_step,
                   text=element_text(size=14))
   
   plot_grid(plot_grid(att1+theme(legend.position="none"), att2, ncol=2, labels="AUTO"),
-            plot_grid(get_legend(att1), "", ncol=2), nrow=2, rel_heights=c(9,1))
+            plot_grid(get_legend_35(att1), "", ncol=2), nrow=2, rel_heights=c(9,1))
   ggsave(paste0("figs/", file_prefix, "-att.pdf"), height=4, width=8, units="in")
 }
 
@@ -412,7 +452,7 @@ att_plot <- function(case_df, gsynth_out, cyclone_step,
 
 att_print <- function(gsynth_out, case_df, cyclone_step,
                       pop_weights, pop,
-                      tr_ind = c("2", "3", "4", "5")){
+                      tr_ind = c("3", "4", "5")){
   
   # will use these to select extreme precip entries
   treated_ind <- gsynth_out$tr
@@ -472,7 +512,7 @@ att_print <- function(gsynth_out, case_df, cyclone_step,
 
 
 spatt_plot <- function(gsynth_out, map, big_map, file_prefix,
-                       tr_ind=c("2", "3", "4", "5")){
+                       tr_ind=c("3", "4", "5")){
   
   time_ind <- which(rownames(gsynth_out$est.att) %in% tr_ind)
   
@@ -499,7 +539,7 @@ spatt_plot <- function(gsynth_out, map, big_map, file_prefix,
     ylim(c(-9, -3))+
     xlim(c(-82, -77))+
     theme_void()+
-    annotation_scale(style="ticks", pad_x= unit(0, "cm"))+
+    annotation_scale(style="ticks", , pad_x= unit(3, "cm"))+
     theme(legend.position="bottom")+
     guides(fill = guide_colorbar(legend.direction= "horizontal",
                                title.position = "top", title.hjust=0.5,
@@ -560,12 +600,10 @@ spatt_plot <- function(gsynth_out, map, big_map, file_prefix,
   
   plot_grid(spatt_map, spatt_scatter, ncol = 2, labels="AUTO") # combine both plots into a grid
   
-  ggsave(paste0("figs/", file_prefix, "-spatt-map.pdf"), height=6, width=8, units="in", dpi=700)
+  ggsave(paste0("figs/", file_prefix, "-spatt-map.png"), height=6, width=8, units="in")
   
   
 }
-
-spatt_plot(synth_out_allper$gsynth_obj, per_map, dept_map, "adm3-allper")
 
 
 
@@ -603,9 +641,10 @@ spatt_plot(synth_out_allper$gsynth_obj, per_map, dept_map, "adm3-allper")
 match_fun <- function(anomaly_upper = .0085, anomaly_lower = .007,
                       coastal_dist = c(), cases_2023 = c(),
                       my_country = "PER3", 
-                      match_num = 10, 
+                      match_num = 5, 
                       plot_bal=FALSE, plot_map=FALSE, file_prefix=NA,
                       map=NULL, big_map=NULL,
+                      extra_vars=NULL,
                       treated_names=c()){
   
   # Return error if file prefix/maps are needed but not provided
@@ -659,8 +698,12 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .007,
     # indicate post_cyclone observations
     mutate(date = as_date(date)) %>%
     mutate(int = ifelse(date >= as_date("2023-03-07") & id %in% extreme_ids, 1, 0)) %>%
-    mutate(week = epiweek(date), year = year(date)) %>%
-    filter(year >= 2018) # match from 2018 onward
+    mutate(week = epiweek(date), year = year(date)) 
+  
+  # save the full climate df without filtering to 2018 to visualize longer time series
+  clim_df_full <- clim_df
+  
+  clim_df %<>% filter(year >= 2018) # match from 2018 onward
   
   # define 4-week periods ("steps")
   step_help <- clim_df %>%
@@ -697,6 +740,17 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .007,
     # format for matching package
     transform(place = as.integer(as.factor(id))) %>%
     mutate(is_control = ifelse(id %in% extreme_ids, "Extreme Precipitation", "Non-extreme Precipitation"))
+
+  if(!is.null(extra_vars)){
+    clim_df %<>% left_join(extra_vars)
+    formula <- setdiff(names(extra_vars), "id") %>%
+      paste(. , collapse=" + ") %>%
+      paste0("~ mean_temp + mean_rain +", .)
+  }
+  
+  else{
+    formula <- "~ mean_temp + mean_rain"
+  }
   
   # how many steps to match on
   lag_num <- nrow(filter(clim_df, is_control == "Extreme Precipitation" & int==0) %>%
@@ -705,13 +759,14 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .007,
   
   cyclone_step <- lag_num+1
   
+  print(formula)
   # do not conduct any matching, just compare extreme precip vs non-extreme precip units
   unmatch_res <- PanelMatch(lag = lag_num, time.id = "step", unit.id = "place",
                             treatment = "int", refinement.method = "none",
                             data = clim_df, match.missing =FALSE,
                             size.match = match_num, qoi = "att", 
                             use.diagonal.variance.matrix = TRUE, 
-                            covs.formula = ~ mean_temp + mean_rain,
+                            covs.formula = as.formula(formula),
                             outcome.var = "mean_rain")
   
   # conduct matching for each of the extreme precip units
@@ -720,9 +775,9 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .007,
                           data = clim_df, match.missing =FALSE,
                           size.match = match_num, qoi = "att", 
                           use.diagonal.variance.matrix = TRUE, 
-                          covs.formula = ~ mean_temp + mean_rain,
+                          covs.formula = as.formula(formula),
                           outcome.var = "mean_rain") 
-  
+  print("4")
   # calculate standardized differences
   bal_calc <- get_covariate_balance(match_res$att, clim_df, c("mean_rain", "mean_temp"), plot=FALSE) %>% colMeans()
   
@@ -784,12 +839,13 @@ match_fun <- function(anomaly_upper = .0085, anomaly_lower = .007,
                     "match_list" = matched_prov,
                     "years" = years,
                     "year_ind" = year_ind,
-                    "cyclone_step" = cyclone_step)
+                    "cyclone_step" = cyclone_step,
+                    "intermediate_clim_df" = clim_df_full)
   
   # balance plots if desired
   if(plot_bal == TRUE){
     balance_plot(match_out, cyclone_step, file_prefix, years, year_ind)
-    climts_plot(match_out, cyclone_step, file_prefix, years, year_ind)
+    climts_plot(match_out, cyclone_step, file_prefix)
   }
   
   # map plot if desired
@@ -1079,6 +1135,8 @@ synth_fun <- function(case_df, match_out, pop_df, file_prefix,
   # calculate rsq
   gsynth_out$rsq <- cor(c(gsynth_out$Y.dat[1:length(gsynth_out$pre.periods),gsynth_out$tr]), 
                         c(gsynth_out$Y.ct[1:length(gsynth_out$pre.periods),gsynth_out$tr]))^2
+  
+  gsynth_out$adj.rsq <- 
   
   # generate plots if requested
   if(att_plot==TRUE){
