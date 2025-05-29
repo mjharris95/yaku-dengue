@@ -326,7 +326,7 @@ inc_data <- rbind(case_df_weekly %>%
 inc_data %>% 
     filter(group == "Extreme Precip.") %>%
     group_by(year) %>%
-    summarize(avg =  sprintf("%.2f", max(incidence))) 
+    summarize(avg =  sprintf("%.2f", max(incidence)))  
 
 ggplot()+
   # geom_rect(aes(xmin = seq.Date(from = as.Date("2016-01-01"), to = as.Date("2022-01-01"), by = "2 years"),
@@ -1290,7 +1290,7 @@ lu_pop <- lu_mask %>%
             terra::zonal(vect(per_map), "sum", na.rm = TRUE)
 lu_pop$id <- per_map$id
 
-#write.csv(lu_pop, "lu_pop.csv")
+#write.csv(lu_pop, "pop/lu_pop.csv")
 
 dpopsq <- dpop*dpop 
   
@@ -1314,9 +1314,9 @@ popsq_df %<>%
   left_join(dplyr::select(pop_df, id, val)) %>%
   mutate(avg_socio = dpob_AMAZONAS/val)
 
-save(pop_df, popsq_df, file="pop_tomatch.RData")
+save(pop_df, popsq_df, file="pop/pop_tomatch.RData")
 
-lu_pop <- read.csv("lu_pop.csv") %>%
+lu_pop <- read.csv("pop/lu_pop.csv") %>%
           mutate(id = str_pad(id, 6, pad="0")) 
 
 lu_pop <- pop_df %>% 
