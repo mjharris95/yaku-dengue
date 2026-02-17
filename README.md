@@ -2,7 +2,7 @@
 
 # Part 1: Climate attribution
 
-The folder 1_Climate_Attribution contains all scripts and outputs for this analysis with its own README file.
+The folder Climate_Attribution contains all scripts and outputs for this analysis with its own README file.
 
 # Part 2: Cyclone Yaku and dengue
 
