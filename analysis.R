@@ -921,7 +921,7 @@ for(lf_num in 0:5){
   
   # store outputs
   synth_lf[[lf_num+1]] <- this_synth
-  
+  %>% 
   synth_lf_df %<>% rbind(data.frame(lf_num = lf_num,
                                     rsq = this_synth$gsynth_obj$rsq,
                                     att.est = this_synth$att_nums$mid_pct,
@@ -1440,7 +1440,7 @@ ggsave(paste0("figs/covar-cor.pdf"), height=20, width=20, units="cm")
 # plot to illustrate relative proportion of different land use types
 name_dict <- read_xlsx("maps/UBIGEODISTRITOS.XLSX") %>%
   mutate(IDDIST = str_pad(IDDIST, 6, pad="0")) %>%
-  rename(id = IDDIST) 
+  rename(id = IDDIST) %>%
   select(id, NOMBDIST)
   
 covar_df %>%
@@ -1615,7 +1615,7 @@ p2 <- boot_vals %>%
   right_join(covar_df) %>%
   ggplot() + 
   geom_linerange(aes(x=temp,ymin=min.eff*1000, ymax=max.eff*1000), 
-                 color="gray", alpha=.6, linewidth=.3)+
+                 color="black", alpha=.4, linewidth=.3)+
   geom_point(aes(x=temp, y=ATT*1000),
              size=1, alpha=.6)+
   theme_classic()+
